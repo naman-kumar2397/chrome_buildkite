@@ -1,12 +1,15 @@
 // Generate Chrome Web Store listing assets from FICTIONAL data.
 // Never point this at a real Buildkite session: the output is published.
 //
-//   npm i --no-save playwright
-//   CHROME_PATH=/path/to/chrome node scripts/store-assets.mjs
+//   npm i --no-save playwright && npx playwright install chromium
+//   node scripts/store-assets.mjs
+//
+// CHROME_PATH may point at a Chromium / Chrome for Testing binary instead —
+// never Google Chrome, which ignores --load-extension since 137.
 //
 // Writes store/screenshot-*.png (1280x800) and store/promo-small.png (440x280).
 
-import { chromium } from 'playwright';
+import { launchExtension } from './lib/browser.mjs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -89,11 +92,7 @@ const SCENES = [
   },
 ];
 
-const ctx = await chromium.launchPersistentContext('', {
-  headless: true,
-  executablePath: process.env.CHROME_PATH || undefined,
-  channel: process.env.CHROME_PATH ? undefined : 'chrome',
-  args: [`--disable-extensions-except=${ROOT}`, `--load-extension=${ROOT}`],
+const { ctx, extId } = await launchExtension({
   viewport: { width: 1280, height: 800 },
   deviceScaleFactor: 1,
 });
@@ -122,9 +121,6 @@ await ctx.route('https://buildkite.com/**', async (route) => {
   return route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body></body></html>' });
 });
 
-let [sw] = ctx.serviceWorkers();
-if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15000 });
-const extId = new URL(sw.url()).host;
 
 /**
  * Screenshot the popup on its own, then compose that image onto a 1280x800

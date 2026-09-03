@@ -159,9 +159,14 @@ There is also an optional end-to-end smoke test that loads the extension in a re
 and checks the popup renders and the chime path works:
 
 ```
-npm i --no-save playwright
-CHROME_PATH=/path/to/chrome npm run smoke     # add a filename to also save a screenshot
+npm i --no-save playwright && npx playwright install chromium
+npm run smoke                                 # add a filename to also save a screenshot
 ```
+
+The browser has to be Playwright's bundled Chromium (Chrome for Testing). Branded Google Chrome
+removed `--load-extension` in version 137, and ignores it silently — the browser starts and the extension
+is simply absent. `CHROME_PATH` can name a Chromium or Chrome for Testing binary kept elsewhere; it must
+never point at Google Chrome. If the extension fails to load, the scripts say exactly this.
 
 ## Permissions
 

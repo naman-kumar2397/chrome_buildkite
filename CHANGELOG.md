@@ -25,6 +25,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - `npm run contrast` measures text contrast from rendered pixels in a real browser — both appearances, three
   page grounds — and fails below WCAG AA. Added to CI alongside the permission and smoke checks.
+- The browser checks now run on Playwright's bundled Chromium (Chrome for Testing) through one shared
+  launcher, `scripts/lib/browser.mjs`. Google Chrome 137 removed `--load-extension` from branded builds and
+  ignores it silently, so on a machine with only Google Chrome the extension never loaded and the checks timed
+  out waiting for its service worker. That failure now explains itself and names the fix.
 
 ## [1.0.0] — 2026-09-03
 

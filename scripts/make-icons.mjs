@@ -2,8 +2,10 @@
 // source, so the mark in the toolbar, the in-page banner and the store listing
 // are the same drawing.
 //
-//   npm i --no-save playwright
-//   CHROME_PATH=/path/to/chrome npm run icons
+//   npm i --no-save playwright && npx playwright install chromium
+//   npm run icons
+//
+// CHROME_PATH may point at a Chromium / Chrome for Testing binary instead.
 //
 // Outputs:
 //   icons/icon16.png, icon48.png, icon128.png   artwork fills the tile (browser UI)
@@ -13,7 +15,7 @@
 // inside a 128x128 canvas, leaving 16px of transparent padding on every side,
 // and carries no drop shadow — the store applies its own treatment.
 
-import { chromium } from 'playwright';
+import { launchPlain } from './lib/browser.mjs';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -85,11 +87,8 @@ function svg(tile, canvas, glyph) {
   </svg>`;
 }
 
-const ctx = await chromium.launchPersistentContext('', {
-  headless: true,
-  executablePath: process.env.CHROME_PATH || undefined,
-  channel: process.env.CHROME_PATH ? undefined : 'chrome',
-});
+// No extension is needed to rasterise an SVG; only the channel rules apply.
+const ctx = await launchPlain();
 
 async function render(file, { tile, canvas, glyph }) {
   const page = await ctx.newPage();

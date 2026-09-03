@@ -2,25 +2,18 @@
 // permission already covers tabs.query({url}), and sendMessage/create need
 // none. Run this before adding any permission back.
 //
-//   npm i --no-save playwright
-//   CHROME_PATH=/path/to/chrome npm run permissions
+//   npm i --no-save playwright && npx playwright install chromium
+//   npm run permissions
+//
+// CHROME_PATH may point at a Chromium / Chrome for Testing binary instead —
+// never Google Chrome, which ignores --load-extension since 137.
 //
 // Not part of `npm test` (needs a browser).
 
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { launchExtension } from './lib/browser.mjs';
 
-const EXT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
-const ctx = await chromium.launchPersistentContext('', {
-  headless: true,
-  executablePath: process.env.CHROME_PATH || undefined,
-  channel: process.env.CHROME_PATH ? undefined : 'chrome',
-  args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
-});
-let [sw] = ctx.serviceWorkers();
-if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15000 });
-const extId = new URL(sw.url()).host;
+const { ctx, extId } = await launchExtension();
 
 await ctx.route('https://buildkite.com/**', (route) => route.fulfill({
   status: 200, contentType: 'text/html',

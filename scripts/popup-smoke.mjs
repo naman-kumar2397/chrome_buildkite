@@ -2,26 +2,18 @@
 // in a real Chromium, seeds storage with representative watches and results,
 // and asserts the popup renders them and that the chime path works.
 //
-//   npm i --no-save playwright
-//   CHROME_PATH=/path/to/chrome node scripts/popup-smoke.mjs [screenshot.png]
+//   npm i --no-save playwright && npx playwright install chromium
+//   node scripts/popup-smoke.mjs [screenshot.png]
+//
+// CHROME_PATH may point at a Chromium / Chrome for Testing binary instead —
+// never Google Chrome, which ignores --load-extension since 137.
 //
 // Not part of `npm test` (needs a browser); run it when changing popup markup.
 
-import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { launchExtension } from './lib/browser.mjs';
 
-const EXT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
-const ctx = await chromium.launchPersistentContext('', {
-  headless: true,
-  executablePath: process.env.CHROME_PATH || undefined,
-  channel: process.env.CHROME_PATH ? undefined : 'chrome',
-  args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
-});
-
-let [sw] = ctx.serviceWorkers();
-if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15000 });
-const extId = new URL(sw.url()).host;
+const { ctx, extId } = await launchExtension();
 console.log('extension id:', extId);
 
 const page = await ctx.newPage();

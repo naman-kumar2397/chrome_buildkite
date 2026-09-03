@@ -1,7 +1,10 @@
 // Measures text contrast from RENDERED PIXELS, in a real browser.
 //
-//   npm i --no-save playwright
-//   CHROME_PATH=/path/to/chrome npm run contrast
+//   npm i --no-save playwright && npx playwright install chromium
+//   npm run contrast
+//
+// CHROME_PATH may point at a Chromium / Chrome for Testing binary instead —
+// never Google Chrome, which ignores --load-extension since 137.
 //
 // Checking a text token against a background token proves nothing here: the
 // banner floats over an arbitrary page, the popup toolbar is translucent, and
@@ -11,26 +14,16 @@
 // Threshold is WCAG AA for normal text (4.5:1). Everything checked is small
 // text; nothing here qualifies for the 3:1 large-text allowance.
 
-import { chromium } from 'playwright';
-import { fileURLToPath } from 'node:url';
+import { launchExtension } from './lib/browser.mjs';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const AA = 4.5;
 
-const ctx = await chromium.launchPersistentContext('', {
-  headless: true,
-  executablePath: process.env.CHROME_PATH || undefined,
-  channel: process.env.CHROME_PATH ? undefined : 'chrome',
-  args: [`--disable-extensions-except=${ROOT}`, `--load-extension=${ROOT}`],
+const { ctx, extId } = await launchExtension({
   viewport: { width: 1100, height: 620 },
   // Sample at 3x: at 1x, small glyphs are mostly antialiased edge pixels and
   // even a near-extreme percentile understates the true text colour.
   deviceScaleFactor: 3,
 });
-
-let [sw] = ctx.serviceWorkers();
-if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15000 });
-const extId = new URL(sw.url()).host;
 
 // A scratch page used only to read pixels back out of a screenshot.
 const reader = await ctx.newPage();

@@ -55,11 +55,16 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Chromium
-        run: npx --yes playwright@latest install --with-deps chromium
-
       - name: Install Playwright
         run: npm i --no-save playwright
+
+      # Two rules here. The browser must come from the same Playwright version
+      # that drives it, so install it through that package rather than a
+      # separate `@latest`. And it must be Playwright's Chromium: the branded
+      # Google Chrome preinstalled on the runner ignores --load-extension
+      # (removed in Chrome 137), so the extension would silently never load.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
       # Permissions the extension does not actually need must not creep back in.
       - name: Permission surface
