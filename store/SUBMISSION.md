@@ -43,8 +43,12 @@ The release workflow builds the package, refuses to continue if the tag disagree
 
 ### Store listing
 Name, short description, detailed description, category **Developer Tools**, language — all from
-`listing.md`. Upload the three 1280×800 screenshots and `promo-small.png` as the small promo tile. Homepage
-URL is the GitHub repo.
+`listing.md`. Upload the three 1280×800 screenshots, `promo-small.png` as the small promo tile, and
+`store-icon-128.png` as the store icon. Homepage URL is the GitHub repo.
+
+The store icon is deliberately not the same file as the one in the package: Google asks for 96×96 of artwork
+inside a 128×128 canvas, so `store-icon-128.png` carries 16px of transparent padding that `icons/icon128.png`
+does not. Both are generated from the same drawing by `npm run icons`.
 
 ### Privacy
 The tab reviewers read most closely. From `listing.md`: the single-purpose statement, a separate
@@ -80,6 +84,7 @@ npm run lint && npm test          # unit tests and lint
 npm run permissions               # proves no unnecessary permission crept back in
 npm run smoke                     # popup renders, chimes play
 npm run assets                    # regenerate screenshots if the UI changed
+npm run icons                     # regenerate icons if the mark changed
 npm run pack                      # inspect exactly what ships
 ```
 

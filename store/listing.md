@@ -73,9 +73,9 @@ https://github.com/naman-kumar2397/chrome_buildkite
 |---|---|
 | Screenshots (1280×800) | `screenshot-1-watching.png`, `screenshot-2-history.png`, `screenshot-3-auto.png` |
 | Small promo tile (440×280) | `promo-small.png` |
-| Icon (128×128) | taken from the uploaded package (`icons/icon128.png`) |
+| Store icon (128×128) | `store-icon-128.png` — 96×96 artwork with 16px transparent padding, no drop shadow |
 
-Regenerate them all with `npm run assets`. They are rendered from fictional `acme` pipelines — never from a
+Regenerate the screenshots and tile with `npm run assets`, and the icons with `npm run icons`. They are rendered from fictional `acme` pipelines — never from a
 real Buildkite session.
 
 ---
