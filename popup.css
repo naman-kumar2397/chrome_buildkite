@@ -1,0 +1,358 @@
+/* Build Watcher popup.
+ * Built on the Apple system tokens in vendor/apple.css. This is a dense,
+ * desktop-density panel, so it uses the macOS text ramp (body 13/16) rather
+ * than the iOS one, with Apple's published optical tracking per size.
+ * Liquid Glass is used only on the toolbar — the functional layer that floats
+ * above scrolling content — never on the content rows themselves.
+ */
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+             system-ui, ui-sans-serif, Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Optical tracking, from Apple's per-size table. */
+  --track-10: 0.012em;
+  --track-11: 0.006em;
+  --track-13: -0.006em;
+  --track-15: -0.016em;
+  --track-17: -0.026em;
+
+  --surface: #FFFFFF;
+  --surface-sunken: var(--gray-6);
+  --surface-opaque: #F7F7FA;
+  --separator: color-mix(in srgb, var(--gray) 26%, transparent);
+  --label: #000000;
+  --label-2: color-mix(in srgb, var(--gray) 92%, var(--label));
+  --label-3: var(--gray);
+  --toolbar-tint: color-mix(in srgb, #FFFFFF 72%, transparent);
+
+  --radius-panel: 12px;
+  --radius-row: 9px;
+  --gap: 3px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #1C1C1E;
+    --surface-sunken: #000000;
+    --surface-opaque: #242426;
+    --separator: color-mix(in srgb, var(--gray) 40%, transparent);
+    --label: #FFFFFF;
+    --label-2: var(--gray-2);
+    --label-3: var(--gray);
+    --toolbar-tint: color-mix(in srgb, #1C1C1E 68%, transparent);
+  }
+}
+
+:root[data-theme="dark"] {
+  --surface: #1C1C1E;
+  --surface-sunken: #000000;
+  --surface-opaque: #242426;
+  --separator: color-mix(in srgb, var(--gray) 40%, transparent);
+  --label: #FFFFFF;
+  --label-2: var(--gray-2);
+  --label-3: var(--gray);
+  --toolbar-tint: color-mix(in srgb, #1C1C1E 68%, transparent);
+}
+
+* { box-sizing: border-box; }
+
+/* An author `display` beats the UA sheet's [hidden] rule, so state the
+   intent explicitly — otherwise anything with a display value ignores it. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  width: 344px;
+  max-height: 600px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  color: var(--label);
+  font-family: var(--font-ui);
+  font-size: var(--macos-body-size);
+  line-height: var(--macos-body-leading);
+  letter-spacing: var(--track-13);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbar — the only Liquid Glass surface. It floats above content that
+   scrolls underneath it, which is what gives the material something to sample.
+   --------------------------------------------------------------------------- */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+
+  background: var(--toolbar-tint);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 40%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 6%, transparent),
+    0 1px 0 var(--separator);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .toolbar { backdrop-filter: none; background: var(--surface-opaque); }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .toolbar { background: var(--surface-opaque); }
+}
+
+.toolbar .mark { display: flex; color: var(--sys-orange); }
+
+.toolbar h1 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--macos-title-2-size);
+  line-height: var(--macos-title-2-leading);
+  letter-spacing: var(--track-17);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+main { padding: 4px 12px 10px; }
+
+section { margin-top: 14px; }
+section:first-of-type { margin-top: 8px; }
+
+h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 2px 6px;
+  font-size: var(--macos-subheadline-size);
+  line-height: var(--macos-subheadline-leading);
+  letter-spacing: var(--track-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--label-3);
+}
+
+.footnote {
+  margin: 6px 2px 0;
+  font-size: var(--macos-footnote-size);
+  line-height: 14px;
+  letter-spacing: var(--track-10);
+  color: var(--label-3);
+}
+.footnote.is-error { color: var(--sys-red); }
+.value { font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* Grouped rows, iOS/macOS inset-list style. Nested radius = outer − gap. */
+.list, .control {
+  list-style: none;
+  margin: 0;
+  padding: var(--gap);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-panel);
+}
+.list:empty { display: none; }
+
+.list li, .control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.list li {
+  padding: 7px 9px;
+  border-radius: var(--radius-row);
+  background: var(--surface);
+}
+.list li + li { margin-top: var(--gap); }
+
+.control { padding: 8px 11px; }
+.control label { flex: 1; }
+
+.info { flex: 1; min-width: 0; }
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--macos-headline-size);
+  line-height: var(--macos-headline-leading);
+  letter-spacing: var(--track-13);
+  font-weight: 600;
+}
+.name a { color: inherit; text-decoration: none; }
+.name a:hover { text-decoration: underline; }
+.name .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.meta {
+  margin-top: 1px;
+  font-size: var(--macos-footnote-size);
+  line-height: 14px;
+  letter-spacing: var(--track-10);
+  color: var(--label-3);
+}
+.meta.is-error { color: var(--sys-red); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.dot.success { background: var(--sys-green); }
+.dot.failure { background: var(--sys-red); }
+.dot.input { background: var(--sys-orange); }
+
+.outcome.success { color: var(--sys-green); }
+.outcome.failure { color: var(--sys-red); }
+.outcome.input { color: var(--sys-orange); }
+
+.tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sys-blue) 16%, transparent);
+  color: var(--sys-blue);
+  font-size: var(--macos-caption-2-size);
+  line-height: 14px;
+  letter-spacing: var(--track-10);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   Controls
+   --------------------------------------------------------------------------- */
+
+button { font: inherit; letter-spacing: inherit; cursor: pointer; border: 0; }
+
+/* Text-only buttons sitting in a horizontal row take the capsule shape. */
+.capsule {
+  flex: 1;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gray) 22%, transparent);
+  color: var(--label);
+  font-size: var(--macos-callout-size);
+  line-height: var(--macos-callout-leading);
+  letter-spacing: var(--track-11);
+  font-weight: 590;
+  transition: transform var(--dur-snappy) var(--ease-snappy),
+              filter var(--dur-snappy) var(--ease-snappy);
+}
+.capsule:hover { filter: brightness(1.06); }
+.capsule:active { transform: scale(0.94); }
+
+/* Tint the background of a control, never the label — and only where the
+   colour carries meaning, which here is the chime each button previews. */
+.tint-green { background: var(--sys-green); color: #fff; }
+.tint-red   { background: var(--sys-red);   color: #fff; }
+.tint-orange{ background: var(--sys-orange); color: #000; }
+
+.chimes { display: flex; gap: 6px; }
+
+.compact {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gray) 22%, transparent);
+  color: var(--label);
+  font-size: var(--macos-caption-1-size);
+  line-height: 16px;
+  letter-spacing: var(--track-10);
+  font-weight: 590;
+  transition: transform var(--dur-snappy) var(--ease-snappy);
+}
+.compact:active { transform: scale(0.92); }
+
+.glyph {
+  display: flex;
+  padding: 5px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--label-2);
+  transition: transform var(--dur-snappy) var(--ease-snappy),
+              background var(--dur-snappy) var(--ease-snappy);
+}
+.glyph:hover { background: color-mix(in srgb, var(--gray) 22%, transparent); }
+.glyph:active { transform: scale(0.9); }
+.glyph.is-busy svg { animation: spin var(--dur-gentle) linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.link {
+  padding: 0;
+  background: none;
+  color: var(--sys-blue);
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  font-weight: 400;
+  text-transform: none;
+}
+.link:hover { text-decoration: underline; }
+
+/* Switch — the HIG asks for a switch, not a checkbox, for a setting that
+   governs a whole behaviour like this one. */
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 23px;
+  padding: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gray) 45%, transparent);
+  transition: background var(--dur-snappy) var(--ease-snappy);
+}
+.switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.28);
+  transition: transform var(--dur-snappy) var(--ease-snappy);
+}
+.switch[aria-checked="true"] { background: var(--sys-green); }
+.switch[aria-checked="true"] .knob { transform: translateX(15px); }
+
+input[type=range] {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--sys-blue);
+}
+
+/* ---------------------------------------------------------------------------
+   Notice and footer
+   --------------------------------------------------------------------------- */
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--sys-orange) 16%, transparent);
+  font-size: var(--macos-footnote-size);
+  line-height: 15px;
+  letter-spacing: var(--track-10);
+}
+.notice b { font-size: var(--macos-body-size); line-height: var(--macos-body-leading); }
+.notice a { color: var(--sys-blue); }
+
+footer {
+  padding: 9px 14px 11px;
+  border-top: 1px solid var(--separator);
+  font-size: var(--macos-caption-1-size);
+  line-height: 15px;
+  letter-spacing: var(--track-10);
+  color: var(--label-3);
+}
+.footer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.disclaimer { margin: 3px 0 0; opacity: .75; }
+
+:focus-visible { outline: 2px solid var(--sys-blue); outline-offset: 2px; }

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Buildkite Build Watcher",
+  "version": "1.0.0",
+  "description": "Watch a running Buildkite build and hear a distinct chime when it passes, fails, or needs your input.",
+  "permissions": ["alarms", "storage", "notifications", "offscreen"],
+  "host_permissions": ["https://buildkite.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://buildkite.com/*/*/builds/*", "https://buildkite.com/builds*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Buildkite Build Watcher",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["vendor/apple.css", "vendor/motion.css"],
+      "matches": ["https://buildkite.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

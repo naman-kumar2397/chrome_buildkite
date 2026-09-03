@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Build Watcher</title>
+    <link rel="stylesheet" href="vendor/apple.css">
+    <link rel="stylesheet" href="vendor/motion.css">
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header class="toolbar">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
+          <path d="M12 2.6a1.15 1.15 0 0 1 1.15 1.15v.62a6.2 6.2 0 0 1 5.05 6.1v3.3l1.3 2.2a.9.9 0 0 1-.78 1.36H5.28a.9.9 0 0 1-.78-1.36l1.3-2.2v-3.3a6.2 6.2 0 0 1 5.05-6.1v-.62A1.15 1.15 0 0 1 12 2.6Zm0 18.8a2.5 2.5 0 0 1-2.42-1.9h4.84A2.5 2.5 0 0 1 12 21.4Z"/>
+        </svg>
+      </span>
+      <h1>Build Watcher</h1>
+      <button id="refresh" class="glyph" title="Check now" aria-label="Check now">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4.2V9h-4.8"/>
+        </svg>
+      </button>
+    </header>
+
+    <main>
+      <div id="signed-out" class="notice" hidden>
+        <b>Not signed in to Buildkite</b>
+        <span>Builds are paused. <a href="https://buildkite.com/" target="_blank">Open buildkite.com</a> to sign in.</span>
+      </div>
+
+      <section>
+        <h2>Your builds</h2>
+        <div class="row control">
+          <label for="discovery">Auto-watch builds I trigger</label>
+          <button id="discovery" class="switch" role="switch" aria-checked="false">
+            <span class="knob"></span>
+          </button>
+        </div>
+        <p id="discovery-status" class="footnote"></p>
+      </section>
+
+      <section id="watching-section">
+        <h2>Watching</h2>
+        <ul id="watches" class="list"></ul>
+        <p id="empty" class="footnote" hidden>
+          Nothing yet. Open a running build on buildkite.com and choose <b>Watch this build</b>.
+        </p>
+      </section>
+
+      <section id="recent-section" hidden>
+        <h2>Recently finished <button id="clear-recent" class="link">Clear</button></h2>
+        <ul id="recent" class="list"></ul>
+      </section>
+
+      <section>
+        <h2>Test chimes</h2>
+        <div class="chimes">
+          <button data-chime="success" class="capsule tint-green">Passed</button>
+          <button data-chime="failure" class="capsule tint-red">Failed</button>
+          <button data-chime="input" class="capsule tint-orange">Input</button>
+          <button data-chime="watching" class="capsule">Watching</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Volume <span id="volume-label" class="value"></span></h2>
+        <input id="volume" type="range" min="0" max="1" step="0.05" aria-label="Chime volume">
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-row">
+        <span id="version"></span>
+        <button id="diagnostics" class="link">Copy diagnostics</button>
+      </div>
+      <p class="disclaimer">Independent project. Not affiliated with Buildkite.</p>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

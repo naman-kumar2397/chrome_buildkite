@@ -1,0 +1,171 @@
+/* Apple system tokens.
+ * Source: https://github.com/naman-kumar2397/design (tokens/apple.css), generated from
+ * the Human Interface Guidelines specification tables. Derived values only — colour and
+ * metric constants — not Apple documentation text. Do not hand-edit; re-copy on update.
+ */
+
+:root {
+  /* system */
+  --sys-red: #FF383C;
+  --sys-orange: #FF8D28;
+  --sys-yellow: #FFCC00;
+  --sys-green: #34C759;
+  --sys-mint: #00C8B3;
+  --sys-teal: #00C3D0;
+  --sys-cyan: #00C0E8;
+  --sys-blue: #0088FF;
+  --sys-indigo: #6155F5;
+  --sys-purple: #CB30E0;
+  --sys-pink: #FF2D55;
+  --sys-brown: #AC7F5E;
+  /* gray */
+  --gray: #8E8E93;
+  --gray-2: #AEAEB2;
+  --gray-3: #C7C7CC;
+  --gray-4: #D1D1D6;
+  --gray-5: #E5E5EA;
+  --gray-6: #F2F2F7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sys-red: #FF4245;
+    --sys-orange: #FF9230;
+    --sys-yellow: #FFD600;
+    --sys-green: #30D158;
+    --sys-mint: #00DAC3;
+    --sys-teal: #00D2E0;
+    --sys-cyan: #3CD3FE;
+    --sys-blue: #0091FF;
+    --sys-indigo: #6D7CFF;
+    --sys-purple: #DB34F2;
+    --sys-pink: #FF375F;
+    --sys-brown: #B78A66;
+    --gray: #8E8E93;
+    --gray-2: #636366;
+    --gray-3: #48484A;
+    --gray-4: #3A3A3C;
+    --gray-5: #2C2C2E;
+    --gray-6: #1C1C1E;
+  }
+}
+
+/* explicit dark */
+:root[data-theme="dark"] {
+  --sys-red: #FF4245;
+  --sys-orange: #FF9230;
+  --sys-yellow: #FFD600;
+  --sys-green: #30D158;
+  --sys-mint: #00DAC3;
+  --sys-teal: #00D2E0;
+  --sys-cyan: #3CD3FE;
+  --sys-blue: #0091FF;
+  --sys-indigo: #6D7CFF;
+  --sys-purple: #DB34F2;
+  --sys-pink: #FF375F;
+  --sys-brown: #B78A66;
+  --gray: #8E8E93;
+  --gray-2: #636366;
+  --gray-3: #48484A;
+  --gray-4: #3A3A3C;
+  --gray-5: #2C2C2E;
+  --gray-6: #1C1C1E;
+}
+
+@media (prefers-contrast: more) {
+  :root:not([data-theme="dark"]) {
+    --sys-red: #E9152D;
+    --sys-orange: #C55300;
+    --sys-yellow: #A16A00;
+    --sys-green: #008932;
+    --sys-mint: #008575;
+    --sys-teal: #008198;
+    --sys-cyan: #007EAE;
+    --sys-blue: #1E6EF4;
+    --sys-indigo: #564ADE;
+    --sys-purple: #B02FC2;
+    --sys-pink: #E7124D;
+    --sys-brown: #956D51;
+    --gray: #6C6C70;
+    --gray-2: #8E8E93;
+    --gray-3: #AEAEB2;
+    --gray-4: #BCBCC0;
+    --gray-5: #D8D8DC;
+    --gray-6: #EBEBF0;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sys-red: #FF6165;
+    --sys-orange: #FFA056;
+    --sys-yellow: #FEDF43;
+    --sys-green: #4AD968;
+    --sys-mint: #54DFCB;
+    --sys-teal: #3BDDEC;
+    --sys-cyan: #6DD9FF;
+    --sys-blue: #5CB8FF;
+    --sys-indigo: #A7AAFF;
+    --sys-purple: #EA8DFF;
+    --sys-pink: #FF8AC4;
+    --sys-brown: #DBA679;
+    --gray: #AEAEB2;
+    --gray-2: #7C7C80;
+    --gray-3: #545456;
+    --gray-4: #444446;
+    --gray-5: #363638;
+    --gray-6: #242426;
+  }
+}
+
+/* ios text styles (1pt treated as 1px) */
+:root {
+  --ios-large-title-size: 34px;
+  --ios-large-title-leading: 41px;
+  --ios-title-1-size: 28px;
+  --ios-title-1-leading: 34px;
+  --ios-title-2-size: 22px;
+  --ios-title-2-leading: 28px;
+  --ios-title-3-size: 20px;
+  --ios-title-3-leading: 25px;
+  --ios-headline-size: 17px;
+  --ios-headline-leading: 22px;
+  --ios-body-size: 17px;
+  --ios-body-leading: 22px;
+  --ios-callout-size: 16px;
+  --ios-callout-leading: 21px;
+  --ios-subhead-size: 15px;
+  --ios-subhead-leading: 20px;
+  --ios-footnote-size: 13px;
+  --ios-footnote-leading: 18px;
+  --ios-caption-1-size: 12px;
+  --ios-caption-1-leading: 16px;
+  --ios-caption-2-size: 11px;
+  --ios-caption-2-leading: 13px;
+}
+
+/* macos text styles (1pt treated as 1px) */
+:root {
+  --macos-large-title-size: 26px;
+  --macos-large-title-leading: 32px;
+  --macos-title-1-size: 22px;
+  --macos-title-1-leading: 26px;
+  --macos-title-2-size: 17px;
+  --macos-title-2-leading: 22px;
+  --macos-title-3-size: 15px;
+  --macos-title-3-leading: 20px;
+  --macos-headline-size: 13px;
+  --macos-headline-leading: 16px;
+  --macos-body-size: 13px;
+  --macos-body-leading: 16px;
+  --macos-callout-size: 12px;
+  --macos-callout-leading: 15px;
+  --macos-subheadline-size: 11px;
+  --macos-subheadline-leading: 14px;
+  --macos-footnote-size: 10px;
+  --macos-footnote-leading: 13px;
+  --macos-caption-1-size: 10px;
+  --macos-caption-1-leading: 13px;
+  --macos-caption-2-size: 10px;
+  --macos-caption-2-leading: 13px;
+}

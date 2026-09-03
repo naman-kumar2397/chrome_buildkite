@@ -1,0 +1,29 @@
+{
+  "name": "buildkite-build-watcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that chimes when a watched Buildkite build passes, fails, or needs input.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint .",
+    "pack": "node scripts/pack.mjs",
+    "icons": "python3 scripts/make-icons.py",
+    "smoke": "node scripts/popup-smoke.mjs",
+    "assets": "node scripts/store-assets.mjs",
+    "permissions": "node scripts/permissions-check.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naman-kumar2397/chrome_buildkite.git"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "globals": "^15.11.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
