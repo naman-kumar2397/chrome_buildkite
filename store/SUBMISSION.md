@@ -82,6 +82,7 @@ On approval the item gets a permanent extension ID. Add the store link to the RE
 ```bash
 npm run lint && npm test          # unit tests and lint
 npm run permissions               # proves no unnecessary permission crept back in
+npm run contrast                  # WCAG AA, measured from rendered pixels
 npm run smoke                     # popup renders, chimes play
 npm run assets                    # regenerate screenshots if the UI changed
 npm run icons                     # regenerate icons if the mark changed

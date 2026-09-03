@@ -117,8 +117,17 @@ Three rules shape the result:
   OS appearance. Both `prefers-reduced-transparency` and the no-`backdrop-filter` fallback are
   implemented.
 
-`npm run smoke` asserts the layering rule directly: it fails if any element other than the toolbar
-carries a `backdrop-filter`.
+Two of those rules are enforced rather than trusted, and both run in CI:
+
+- `npm run smoke` fails if any element other than the toolbar carries a `backdrop-filter`, so glass cannot
+  drift into the content layer.
+- `npm run contrast` measures every piece of text against **its own rendered pixels** in a real browser, in both
+  appearances and over three different page grounds, and fails below WCAG AA (4.5:1). Checking a colour token
+  against a background token would prove nothing here: the banner floats over an arbitrary page, the toolbar is
+  translucent, and tinted controls are colour-mixed. All of it only resolves at paint time.
+
+The second one exists because it caught two real bugs — a banner that rendered dark-on-dark over Buildkite, and
+default-tier colours used as small text, which is 2.2:1 for green on white.
 
 ## Development
 

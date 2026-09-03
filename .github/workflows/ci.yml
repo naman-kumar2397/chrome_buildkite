@@ -41,3 +41,35 @@ jobs:
           name: extension-zip
           path: dist/*.zip
           if-no-files-found: error
+
+  browser:
+    name: Browser checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx --yes playwright@latest install --with-deps chromium
+
+      - name: Install Playwright
+        run: npm i --no-save playwright
+
+      # Permissions the extension does not actually need must not creep back in.
+      - name: Permission surface
+        run: npm run permissions
+
+      # Contrast measured from rendered pixels, not from tokens: the banner
+      # floats over an arbitrary page and the toolbar is translucent, so these
+      # only resolve at paint time.
+      - name: Contrast (WCAG AA)
+        run: npm run contrast
+
+      - name: Popup smoke test
+        run: npm run smoke

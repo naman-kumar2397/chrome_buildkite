@@ -211,11 +211,17 @@
       .bar { background: var(--surface-opaque); }
     }
 
+    /* Small text takes the increased-contrast tier in every appearance; the
+       default tier is for fills and marks. --sys-green on a light ground is
+       2.2:1, which fails AA outright. */
+    :host { --text-green: #4AD968; --text-blue: #5CB8FF; }
+    :host([data-behind="light"]) { --text-green: #008932; --text-blue: #1E6EF4; }
+
     .bell { display: flex; flex: 0 0 auto; color: var(--sys-orange, #FF8D28); }
     .text { flex: 1; min-width: 0; }
     .text b { font-weight: 600; }
     .state { opacity: .72; }
-    .watching { color: var(--sys-green, #34C759); font-weight: 600; }
+    .watching { color: var(--text-green); font-weight: 600; }
 
     button {
       font: inherit;
@@ -232,7 +238,9 @@
       gap: 6px;
       padding: 6px 14px;
       border-radius: 999px;
-      background: var(--sys-blue, #0088FF);
+      /* White on --sys-blue is 3.5:1. A filled control carrying a label needs
+         the increased-contrast tier as its fill, in both appearances. */
+      background: #1E6EF4;
       color: #fff;
       font-weight: 590;
       transition: transform var(--dur-snappy, 371ms) var(--ease-snappy, ease-out),
@@ -258,7 +266,7 @@
     .close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
     .close:active { transform: scale(0.9); }
 
-    :focus-visible { outline: 2px solid var(--sys-blue, #0088FF); outline-offset: 2px; }
+    :focus-visible { outline: 2px solid var(--text-blue); outline-offset: 2px; }
   `;
 
   const BELL_SVG = '<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">'
@@ -282,12 +290,37 @@
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
   }
 
-  /** 'light' or 'dark', from the first opaque background behind the banner. */
+  /**
+   * 'light' or 'dark' for whatever is actually painted behind the banner.
+   *
+   * Reading document.body is not good enough: Buildkite leaves `body` light and
+   * paints its dark theme on an inner wrapper, so a body-only probe picks light
+   * and the banner ends up dark-on-dark. Sample the real stacking order at the
+   * point the bar occupies instead, and fall back progressively.
+   */
   function pageBehind() {
+    const x = Math.round(window.innerWidth / 2);
+    const y = 34; // vertical centre of the bar: top 14px + roughly half its height
+
+    const stack = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(x, y)
+      : [];
+    for (const el of stack) {
+      if (el.id === BANNER_ID || (el.closest && el.closest(`#${BANNER_ID}`))) continue;
+      const l = luminanceOf(getComputedStyle(el).backgroundColor);
+      if (l !== null) return l > 0.35 ? 'light' : 'dark';
+    }
+
     for (const el of [document.body, document.documentElement]) {
       const l = el && luminanceOf(getComputedStyle(el).backgroundColor);
       if (l !== null && l !== undefined) return l > 0.35 ? 'light' : 'dark';
     }
+
+    // Nothing paints a background anywhere: the page's own text colour still
+    // tells us which way round it is. Light text means a dark page.
+    const textL = document.body && luminanceOf(getComputedStyle(document.body).color);
+    if (textL !== null && textL !== undefined) return textL > 0.5 ? 'dark' : 'light';
+
     return 'dark';
   }
 
