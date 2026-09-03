@@ -117,8 +117,17 @@ Three rules shape the result:
   OS appearance. Both `prefers-reduced-transparency` and the no-`backdrop-filter` fallback are
   implemented.
 
-`npm run smoke` asserts the layering rule directly: it fails if any element other than the toolbar
-carries a `backdrop-filter`.
+Two of those rules are enforced rather than trusted, and both run in CI:
+
+- `npm run smoke` fails if any element other than the toolbar carries a `backdrop-filter`, so glass cannot
+  drift into the content layer.
+- `npm run contrast` measures every piece of text against **its own rendered pixels** in a real browser, in both
+  appearances and over three different page grounds, and fails below WCAG AA (4.5:1). Checking a colour token
+  against a background token would prove nothing here: the banner floats over an arbitrary page, the toolbar is
+  translucent, and tinted controls are colour-mixed. All of it only resolves at paint time.
+
+The second one exists because it caught two real bugs — a banner that rendered dark-on-dark over Buildkite, and
+default-tier colours used as small text, which is 2.2:1 for green on white.
 
 ## Development
 
@@ -150,9 +159,14 @@ There is also an optional end-to-end smoke test that loads the extension in a re
 and checks the popup renders and the chime path works:
 
 ```
-npm i --no-save playwright
-CHROME_PATH=/path/to/chrome npm run smoke     # add a filename to also save a screenshot
+npm i --no-save playwright && npx playwright install chromium
+npm run smoke                                 # add a filename to also save a screenshot
 ```
+
+The browser has to be Playwright's bundled Chromium (Chrome for Testing). Branded Google Chrome
+removed `--load-extension` in version 137, and ignores it silently — the browser starts and the extension
+is simply absent. `CHROME_PATH` can name a Chromium or Chrome for Testing binary kept elsewhere; it must
+never point at Google Chrome. If the extension fails to load, the scripts say exactly this.
 
 ## Permissions
 

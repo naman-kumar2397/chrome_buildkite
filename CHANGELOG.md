@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- The in-page banner rendered dark text on dark glass over Buildkite. It chose its contrast from
+  `document.body`, which Buildkite leaves light while painting its dark theme on an inner wrapper. It now
+  samples the element stack actually behind the bar, falling back to the document and then to the page's own
+  text colour.
+- Default-tier system colours were used as small text throughout the popup. `--sys-green` on white is 2.2:1,
+  well below WCAG AA. Text roles now bind to the increased-contrast tier in every appearance, while fills and
+  marks keep the default tier. Muted text was also too light at 3.2:1.
+- The banner's primary action was white on `--sys-blue`, which is 3.5:1. It now uses the increased-contrast
+  blue as its fill.
+
+### Changed
+- The chime buttons and the `AUTO` tag are neutral, carrying a coloured dot rather than a coloured background.
+  Colour on its own tint cannot reach 4.5:1 without going darker than Apple's published tier, and the HIG asks
+  for tint on one control per view rather than four.
+
+### Added
+- `npm run contrast` measures text contrast from rendered pixels in a real browser — both appearances, three
+  page grounds — and fails below WCAG AA. Added to CI alongside the permission and smoke checks.
+- The browser checks now run on Playwright's bundled Chromium (Chrome for Testing) through one shared
+  launcher, `scripts/lib/browser.mjs`. Google Chrome 137 removed `--load-extension` from branded builds and
+  ignores it silently, so on a machine with only Google Chrome the extension never loaded and the checks timed
+  out waiting for its service worker. That failure now explains itself and names the fix.
+
 ## [1.0.0] — 2026-09-03
 
 First public release.

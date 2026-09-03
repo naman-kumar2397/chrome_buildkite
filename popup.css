@@ -22,9 +22,18 @@
   --surface-opaque: #F7F7FA;
   --separator: color-mix(in srgb, var(--gray) 26%, transparent);
   --label: #000000;
-  --label-2: color-mix(in srgb, var(--gray) 92%, var(--label));
-  --label-3: var(--gray);
+  --label-2: #48484A;
+  --label-3: #5F5F63;
   --toolbar-tint: color-mix(in srgb, #FFFFFF 72%, transparent);
+
+  /* Two colour roles, not one. The default tier (--sys-*) is drawn for fills
+     and marks; small text needs the increased-contrast tier in every
+     appearance, not only under prefers-contrast. --sys-green as text on white
+     is 2.2:1, which fails AA by a wide margin. */
+  --text-green: #008932;
+  --text-red: #E9152D;
+  --text-orange: #C55300;
+  --text-blue: #1E6EF4;
 
   --radius-panel: 12px;
   --radius-row: 9px;
@@ -39,9 +48,13 @@
     --surface-opaque: #242426;
     --separator: color-mix(in srgb, var(--gray) 40%, transparent);
     --label: #FFFFFF;
-    --label-2: var(--gray-2);
-    --label-3: var(--gray);
+    --label-2: #C7C7CC;
+    --label-3: #AEAEB2;
     --toolbar-tint: color-mix(in srgb, #1C1C1E 68%, transparent);
+    --text-green: #4AD968;
+    --text-red: #FF6165;
+    --text-orange: #FFA056;
+    --text-blue: #5CB8FF;
   }
 }
 
@@ -51,9 +64,13 @@
   --surface-opaque: #242426;
   --separator: color-mix(in srgb, var(--gray) 40%, transparent);
   --label: #FFFFFF;
-  --label-2: var(--gray-2);
-  --label-3: var(--gray);
+  --label-2: #C7C7CC;
+  --label-3: #AEAEB2;
   --toolbar-tint: color-mix(in srgb, #1C1C1E 68%, transparent);
+    --text-green: #4AD968;
+    --text-red: #FF6165;
+    --text-orange: #FFA056;
+    --text-blue: #5CB8FF;
 }
 
 * { box-sizing: border-box; }
@@ -147,7 +164,7 @@ h2 {
   letter-spacing: var(--track-10);
   color: var(--label-3);
 }
-.footnote.is-error { color: var(--sys-red); }
+.footnote.is-error { color: var(--text-red); }
 .value { font-weight: 400; text-transform: none; letter-spacing: 0; }
 
 /* Grouped rows, iOS/macOS inset-list style. Nested radius = outer − gap. */
@@ -198,23 +215,23 @@ h2 {
   letter-spacing: var(--track-10);
   color: var(--label-3);
 }
-.meta.is-error { color: var(--sys-red); }
+.meta.is-error { color: var(--text-red); }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .dot.success { background: var(--sys-green); }
 .dot.failure { background: var(--sys-red); }
 .dot.input { background: var(--sys-orange); }
 
-.outcome.success { color: var(--sys-green); }
-.outcome.failure { color: var(--sys-red); }
-.outcome.input { color: var(--sys-orange); }
+.outcome.success { color: var(--text-green); }
+.outcome.failure { color: var(--text-red); }
+.outcome.input { color: var(--text-orange); }
 
 .tag {
   flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--sys-blue) 16%, transparent);
-  color: var(--sys-blue);
+  background: color-mix(in srgb, var(--gray) 24%, transparent);
+  color: var(--label-2);
   font-size: var(--macos-caption-2-size);
   line-height: 14px;
   letter-spacing: var(--track-10);
@@ -231,6 +248,10 @@ button { font: inherit; letter-spacing: inherit; cursor: pointer; border: 0; }
 /* Text-only buttons sitting in a horizontal row take the capsule shape. */
 .capsule {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 5px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--gray) 22%, transparent);
@@ -245,11 +266,12 @@ button { font: inherit; letter-spacing: inherit; cursor: pointer; border: 0; }
 .capsule:hover { filter: brightness(1.06); }
 .capsule:active { transform: scale(0.94); }
 
-/* Tint the background of a control, never the label — and only where the
-   colour carries meaning, which here is the chime each button previews. */
-.tint-green { background: var(--sys-green); color: #fff; }
-.tint-red   { background: var(--sys-red);   color: #fff; }
-.tint-orange{ background: var(--sys-orange); color: #000; }
+/* The HIG asks for tint on one control per view, and colour-on-its-own-tint
+   cannot reach 4.5:1 without going darker than Apple's published tier. So the
+   chime buttons are neutral capsules carrying a coloured mark: the dot is a
+   fill (default tier is correct there) and the label keeps full contrast. */
+.capsule .dot { margin-right: 1px; }
+.dot.watching { background: var(--gray-2); }
 
 .chimes { display: flex; gap: 6px; }
 
@@ -284,7 +306,7 @@ button { font: inherit; letter-spacing: inherit; cursor: pointer; border: 0; }
 .link {
   padding: 0;
   background: none;
-  color: var(--sys-blue);
+  color: var(--text-blue);
   font-size: inherit;
   line-height: inherit;
   letter-spacing: inherit;
@@ -342,7 +364,7 @@ input[type=range] {
   letter-spacing: var(--track-10);
 }
 .notice b { font-size: var(--macos-body-size); line-height: var(--macos-body-leading); }
-.notice a { color: var(--sys-blue); }
+.notice a { color: var(--text-blue); }
 
 footer {
   padding: 9px 14px 11px;
@@ -355,4 +377,4 @@ footer {
 .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .disclaimer { margin: 3px 0 0; opacity: .75; }
 
-:focus-visible { outline: 2px solid var(--sys-blue); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--text-blue); outline-offset: 2px; }
