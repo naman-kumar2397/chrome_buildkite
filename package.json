@@ -8,7 +8,7 @@
     "test": "node --test",
     "lint": "eslint .",
     "pack": "node scripts/pack.mjs",
-    "icons": "python3 scripts/make-icons.py",
+    "icons": "node scripts/make-icons.mjs",
     "smoke": "node scripts/popup-smoke.mjs",
     "assets": "node scripts/store-assets.mjs",
     "permissions": "node scripts/permissions-check.mjs"

@@ -132,7 +132,7 @@ discovery.js      pure logic: parsing the /builds listing, baseline and dedupe r
 content.js        banner UI on build pages + DOM-state and DOM-build-list responders
 offscreen.*       Web Audio chime synthesis (service workers can't play audio)
 popup.*           watch list, test chimes, volume
-scripts/make-icons.py  regenerates icons/ with the stdlib only (`npm run icons`)
+scripts/make-icons.mjs   renders the icons and the store icon from one drawing (`npm run icons`)
 scripts/popup-smoke.mjs  optional browser smoke test for the popup (`npm run smoke`)
 scripts/store-assets.mjs generates the store screenshots from fictional data (`npm run assets`)
 vendor/           Apple design tokens, copied from the design repo — do not hand-edit
