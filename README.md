@@ -1,180 +1,133 @@
-# Buildkite Build Watcher
+<p align="center">
+  <img src="store/store-icon-128.png" width="96" height="96" alt="">
+</p>
 
-> An independent open-source project. Not affiliated with, endorsed by, or sponsored by Buildkite.
+<h1 align="center">Buildkite Build Watcher</h1>
 
-A small Chrome extension that notices when you're looking at a Buildkite build that is still running,
-offers to **watch** it, and then plays a distinct chime (plus a desktop notification) when the build:
+<p align="center">
+  <strong>Stop watching the build log. Hear it finish instead.</strong>
+</p>
 
-| Event | Chime | Buildkite state |
+<p align="center">
+  <a href="https://github.com/naman-kumar2397/chrome_buildkite/actions/workflows/ci.yml"><img src="https://github.com/naman-kumar2397/chrome_buildkite/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <!-- store: replace this badge with a link to the listing once the review clears -->
+  <img src="https://img.shields.io/badge/Chrome%20Web%20Store-in%20review-8E8E93" alt="Chrome Web Store: in review">
+  <img src="https://img.shields.io/badge/Manifest-V3-34C759" alt="Manifest V3">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-0088FF" alt="MIT licence"></a>
+</p>
+
+<p align="center">
+  <sub>An independent open-source project. Not affiliated with, endorsed by, or sponsored by Buildkite.</sub>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="store/screenshot-1-watching.png" width="800" alt="The Build Watcher popup showing a running build, one waiting for input, and a build that just passed">
+</p>
+
+<br>
+
+You kick off a build. You know it'll take eleven minutes. So you open something else, and then you
+spend those eleven minutes glancing back at the tab to see if it's green yet.
+
+Build Watcher ends that. It notices when you're looking at a build that's still running, offers to
+watch it, and plays a sound the moment it's done — one sound for passed, a different one for failed,
+another when a step is blocked waiting on you. Go do the other thing. You'll hear it.
+
+## What you hear
+
+| | Sound | When |
 |---|---|---|
-| **Passed** | rising four-note arpeggio | `passed` |
-| **Failed** | two descending low buzzes | `failed`, `canceled` (also `skipped`, `not_run`) |
-| **Needs input** | double ping, repeated once | a `block` step is waiting (`blocked: true`) |
-| **Now watching** | two soft ascending blips | a build you triggered was picked up automatically |
+| 🟢 **Passed** | a rising four-note chime | the build went green |
+| 🔴 **Failed** | two descending tones | it failed, or someone cancelled it |
+| 🟠 **Needs input** | a double ping, repeated once | a block step is waiting for you to unblock it |
+| ⚪ **Now watching** | two soft blips, quieter than the rest | a build you triggered was picked up on its own |
 
-After a "needs input" chime the watcher keeps going: unblock the step and you'll get the pass/fail chime
-when the build finally finishes.
+After a *needs input* chime it keeps watching. Unblock the step and you'll hear the pass or fail when the
+build finally finishes.
 
-No login handling, no API tokens. The extension polls buildkite.com in the background using the session
-cookies your browser already has, so the chime fires even if you've closed the build tab.
+Every sound is synthesised. There are no audio files, and there's a volume slider and a **test** button
+for each one in the popup, so you can hear them before you rely on them.
 
-## Install (load unpacked)
+## Builds you start watch themselves
 
-1. Clone this repo.
-2. Open `chrome://extensions`, turn on **Developer mode** (top right).
-3. Click **Load unpacked** and pick the repo folder.
-4. Open any running build on `https://buildkite.com/<org>/<pipeline>/builds/<n>`. A banner appears at the
-   top of the page: click **Watch this build**.
+Turn on **Auto-watch builds I trigger** and anything you kick off is picked up within a minute, read from
+the same *My Builds* list you already see in Buildkite. No adding by hand. You can still watch anyone
+else's build from its page — the banner offers to.
 
-## Your own builds are picked up automatically
+<p align="center">
+  <img src="store/screenshot-3-auto.png" width="800" alt="The popup with three auto-watched builds">
+</p>
 
-**Auto-watch builds I trigger** (on by default, toggle in the popup) polls `https://buildkite.com/builds` once
-a minute and starts watching anything new that Buildkite lists as yours. Auto-watched builds carry an `AUTO`
-tag in the popup; manual watching is unchanged and still works for other people's builds.
+It's built to stay quiet:
 
-- When it picks builds up you get one soft acknowledgement chime per cycle, not one per build.
-- Builds already running when you enable it are ignored, so switching it on is never a burst of chimes.
-- Unwatching an auto-watched build makes it stay unwatched.
-- At most 25 builds are auto-watched at once, so a mass rebuild cannot spawn hundreds of pollers.
-- Because the listing already reports each build's state, watched builds it covers skip their individual
-  status fetch that cycle. Discovery costs roughly one request a minute, not one per build.
+- Builds already running when you switch it on are ignored, so enabling it is never a burst of chimes.
+- Unwatch something and it stays unwatched.
+- Five builds arriving together make one soft sound, not five.
 
-The listing is read through the same fallback chain as build status (`/builds.json` and variants, then the
-`/builds` HTML, then any open buildkite.com tab). The popup's status line names which one worked, or shows the
-error if none did.
+## It tells you which one
 
-The toolbar icon shows how many builds are being watched. Click it to see them, unwatch, test the three
-chimes, or adjust the volume.
+<p align="center">
+  <img src="store/screenshot-2-history.png" width="800" alt="The popup's Recently finished list, colour-coded by outcome">
+</p>
 
-**Recently finished** in the popup keeps the last dozen builds that chimed, colour-coded by outcome, so if
-you miss a chime or a notification you can still tell which build it was. Click one to open it, or **clear**
-to empty the list.
+A desktop notification names the pipeline and build number, and clicking it opens the build. Miss the
+chime entirely and the popup still has it: **Recently finished** keeps the last dozen builds that chimed,
+colour-coded by outcome, so you always know what happened while you were away.
 
-Requires Chrome 120 or newer (30-second alarm polling).
+## Nothing to set up
 
-### Confirming an update took effect
+No API token. No login. No account. It reads build status using the Buildkite session your browser
+already has — the same pages you can open yourself. Install it and open a build.
 
-The popup footer shows the version it is running, e.g. `v0.3.0`. After pulling changes and clicking the
-reload arrow on `chrome://extensions`, open the popup and check that number against `manifest.json`. If it
-still shows the old one, Chrome is reading a different folder than the one you pulled into.
+If you're signed out of Buildkite, it says so and waits, rather than failing quietly.
 
-## How status is fetched
+## Nothing leaves your browser
 
-Every 30 seconds the service worker tries these, in order, and remembers which one worked:
+There is no server, no analytics, no telemetry, no remote code. The builds you're watching and your
+settings live in your browser's local storage and are never transmitted anywhere. The only network
+requests are to buildkite.com.
 
-1. `GET <build url>.json` with your session cookies (`Accept: application/json`), reading `state` and `blocked`.
-2. `GET <build url>` as HTML, extracting the state from the page's data attributes or embedded JSON.
-3. Asking the content script in any open tab for that build to read the state from the DOM.
+That isn't a promise buried in a policy; it's a consequence of how it's built. The full source is here,
+the [privacy policy](PRIVACY.md) is two screens long, and the permission list is short:
 
-If all three fail, the watch stays and the popup shows the error next to the build. It never gives up on its own.
+`buildkite.com` · `alarms` · `storage` · `notifications` · `offscreen`
 
-### What the JSON looks like
+The **Copy diagnostics** link in the popup exists for bug reports. It copies a report with organisation
+and pipeline names replaced by placeholders and nothing sensitive included — you decide whether to paste
+it anywhere.
 
-The build page's JSON is Buildkite's internal shape, not the public REST API. The fields the extension reads:
+## Install
 
-| Field | Meaning |
-|---|---|
-| `state` | `started` while running (mapped to `running`); `passed`, `failed`, `canceled` once done; `scheduled`, `creating`, `canceling`, `failing` in between |
-| `blocked_state` | `blocked` while a block step waits for someone; that is the "needs input" signal |
-| `finished_at` | non-null once the build is done, used as a second finished signal |
-| `canceled_at`, `cancel_status` | non-null when the build was canceled |
+**From the Chrome Web Store** — the listing is in review. The link will appear here once it's live.
 
-If Buildkite reports a state name the extension does not know, the popup shows it as `raw: <value>` next to
-the build. A finished build with an unknown state still gets the failure chime so it is never silently missed.
+**Or load it yourself**, right now:
 
-### Probe the endpoint on your account (10 seconds)
+1. Download the latest `buildkite-build-watcher-<version>.zip` from
+   [Releases](https://github.com/naman-kumar2397/chrome_buildkite/releases) and unzip it, or clone this repo.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick the folder.
+3. Open any running build on buildkite.com. A bar appears at the top: **Watch this build**.
 
-Open a build page, open DevTools (Console) and run:
+Works with **buildkite.com** on Chrome 120 or newer. Self-hosted Buildkite instances aren't supported yet.
 
-```js
-fetch(location.pathname + '.json', { credentials: 'include', headers: { Accept: 'application/json' } })
-  .then(r => r.json())
-  .then(j => console.log({ state: j.state, blocked_state: j.blocked_state, finished_at: j.finished_at, canceled_at: j.canceled_at }))
-```
+## Made to feel at home
 
-If you see a `state`, provider 1 is working and polling is cheap and exact. If you get HTML or an error, the
-extension silently uses providers 2 and 3. If the popup reports that all providers fail, open an issue with
-the output above (redact anything sensitive).
+The interface follows Apple's Human Interface Guidelines: the system font, the real system colours in
+light and dark, spring motion that stands down when you've asked for reduced motion, and glass only where
+the guidelines put it. Every piece of text is measured against its own rendered pixels for WCAG AA
+contrast, in both appearances, on every push — so it's legible over Buildkite's dark UI and on a light
+one alike.
 
-## Design
+## For developers
 
-The interface is built on Apple's Human Interface Guidelines, using the token set from
-[naman-kumar2397/design](https://github.com/naman-kumar2397/design) — `vendor/apple.css` and
-`vendor/motion.css`, copied in verbatim and not hand-edited. Those files carry the current system
-colours in four appearance variants, the published text ramps, and spring easing curves.
+It's plain JavaScript and Manifest V3 with no build step. [CONTRIBUTING.md](CONTRIBUTING.md) covers how
+build state is fetched, the design rules and how they're enforced, and every check you can run.
 
-Three rules shape the result:
+[Changelog](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Licence](LICENSE)
 
-- **The system font, never a bundled one.** Apple's font licence forbids shipping SF Pro on the
-  web, so the stack asks the operating system for its own UI face. Metrics — size, leading and
-  Apple's published optical tracking per size — are set so the design holds up on whatever face
-  resolves.
-- **The macOS text ramp, not the iOS one.** This is a dense desktop panel read at desk distance,
-  so body text is 13/16 rather than 17/22.
-- **Liquid Glass only on the functional layer.** The popup toolbar and the floating in-page banner
-  get the material; content rows never do. The banner measures the luminance of the page behind it
-  to choose its contrast, because a floating overlay has to read against the page rather than the
-  OS appearance. Both `prefers-reduced-transparency` and the no-`backdrop-filter` fallback are
-  implemented.
+<br>
 
-Two of those rules are enforced rather than trusted, and both run in CI:
-
-- `npm run smoke` fails if any element other than the toolbar carries a `backdrop-filter`, so glass cannot
-  drift into the content layer.
-- `npm run contrast` measures every piece of text against **its own rendered pixels** in a real browser, in both
-  appearances and over three different page grounds, and fails below WCAG AA (4.5:1). Checking a colour token
-  against a background token would prove nothing here: the banner floats over an arbitrary page, the toolbar is
-  translucent, and tinted controls are colour-mixed. All of it only resolves at paint time.
-
-The second one exists because it caught two real bugs — a banner that rendered dark-on-dark over Buildkite, and
-default-tier colours used as small text, which is 2.2:1 for green on white.
-
-## Development
-
-Plain JavaScript, Manifest V3, no build step. Edit files and hit **Reload** on `chrome://extensions`.
-
-```
-manifest.json     permissions, content script match, offscreen + alarms
-background.js     service worker: watch store, 30s alarm, provider chain, notifications, offscreen chimes
-status.js         pure logic: URL parsing, state normalisation, event decisions, provider chain
-discovery.js      pure logic: parsing the /builds listing, baseline and dedupe rules, provider chain
-content.js        banner UI on build pages + DOM-state and DOM-build-list responders
-offscreen.*       Web Audio chime synthesis (service workers can't play audio)
-popup.*           watch list, test chimes, volume
-scripts/make-icons.mjs   renders the icons and the store icon from one drawing (`npm run icons`)
-scripts/popup-smoke.mjs  optional browser smoke test for the popup (`npm run smoke`)
-scripts/store-assets.mjs generates the store screenshots from fictional data (`npm run assets`)
-vendor/           Apple design tokens, copied from the design repo — do not hand-edit
-store/            generated Chrome Web Store listing assets
-test/             node --test unit tests for status.js (`npm test`)
-```
-
-Run the tests with:
-
-```
-npm test
-```
-
-There is also an optional end-to-end smoke test that loads the extension in a real Chromium, seeds storage,
-and checks the popup renders and the chime path works:
-
-```
-npm i --no-save playwright && npx playwright install chromium
-npm run smoke                                 # add a filename to also save a screenshot
-```
-
-The browser has to be Playwright's bundled Chromium (Chrome for Testing). Branded Google Chrome
-removed `--load-extension` in version 137, and ignores it silently — the browser starts and the extension
-is simply absent. `CHROME_PATH` can name a Chromium or Chrome for Testing binary kept elsewhere; it must
-never point at Google Chrome. If the extension fails to load, the scripts say exactly this.
-
-## Permissions
-
-- `alarms`, `storage`: polling schedule and the watch list.
-- `notifications`: desktop notification alongside the chime; clicking it opens the build.
-- `offscreen`: hidden document used only to play audio.
-- Host access to `https://buildkite.com/*`: fetch build status with your existing session.
-
-Notably absent: `tabs`. Opening a build from a notification and reading state from an already-open Buildkite
-tab are both covered by the host permission above. `npm run permissions` proves it in a real browser, so the
-permission cannot creep back in unnoticed.
+<p align="center">
+  <sub>Buildkite is a trademark of Buildkite Pty Ltd. This project is not affiliated with Buildkite.</sub>
+</p>
