@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   stripAnsi, logLines, scoreLine, summariseLog, htmlToText, isFailedJob, jobLabel,
   pickFailedJobs, formatReport, jobLogUrls, extractLogText, extractAnnotations, buildFailureReport,
+  redactSecrets,
 } from '../failure.js';
 
 const ESC = String.fromCharCode(27);
@@ -85,6 +87,73 @@ test('summariseLog caps its own size', () => {
 test('summariseLog gives nothing back for an empty log', () => {
   assert.equal(summariseLog(''), null);
   assert.equal(summariseLog(`${ESC}[0m\n\n`), null);
+});
+
+// ---------------------------------------------------------------------------
+// Redaction. This button puts a build log into a Slack message, so a pipeline
+// that exports credentials next to the failure must not leak them.
+// ---------------------------------------------------------------------------
+
+test('redactSecrets removes assignments whose name gives them away', () => {
+  assert.equal(redactSecrets('export FALCON_CLIENT_SECRET=EXAMPLEsecretEXAMPLE00; \\'),
+    'export FALCON_CLIENT_SECRET=‹redacted›; \\');
+  assert.equal(redactSecrets('API_TOKEN=short'), 'API_TOKEN=‹redacted›');
+  assert.equal(redactSecrets('DB_PASSWORD="hunter2"'), 'DB_PASSWORD=‹redacted›');
+});
+
+test('redactSecrets removes a value too opaque to be anything but a key', () => {
+  // The name says nothing, so the value has to.
+  assert.equal(redactSecrets('FALCON_CID=EXAMPLECIDEXAMPLECIDEXAMPLECID00-43'), 'FALCON_CID=‹redacted›');
+});
+
+test('redactSecrets knows the token shapes on sight', () => {
+  assert.equal(redactSecrets('key AKIAIOSFODNN7EXAMPLE here'), 'key ‹redacted› here');
+  assert.equal(redactSecrets('git clone https://user:pw@github.com/x/y'),
+    'git clone https://‹redacted›@github.com/x/y');
+  assert.equal(redactSecrets('Authorization: Bearer abcdefghijklmnop'), 'Authorization: ‹redacted›');
+  assert.equal(redactSecrets('-----BEGIN RSA PRIVATE KEY-----'), '‹redacted›');
+});
+
+test('redactSecrets leaves the error message intact', () => {
+  // Every one of these would gut the report if it went.
+  const keep = [
+    'WARNING! Using --password via the CLI is insecure. Use --password-stdin.',
+    'export SENSOR_TYPE=falcon-container; \\',
+    '  --parameter-overrides RepositoryName=falcon-sensor',
+    '--role-arn arn:aws:iam::000000000000:role/cfn-deploy-role',
+    'Error: table "widgets" does not exist',
+  ];
+  for (const line of keep) assert.equal(redactSecrets(line), line, line);
+});
+
+test('an excerpt is redacted on the way out', () => {
+  const out = summariseLog('Error: boom\nexport API_SECRET=EXAMPLEsecretEXAMPLEsecret00');
+  assert.ok(out.lines.join('\n').includes('API_SECRET=‹redacted›'));
+  assert.ok(!out.lines.join('\n').includes('EXAMPLEsecret'));
+});
+
+// ---------------------------------------------------------------------------
+// A real failing build, reduced to its shape (credentials replaced).
+// ---------------------------------------------------------------------------
+
+test('a real log: the cause anchors, the exit-status wrappers do not', () => {
+  const out = summariseLog(readFileSync(new URL('fixtures/ecr-falcon.log', import.meta.url), 'utf8'));
+  const text = out.lines.join('\n');
+
+  // The cause, not the three lines below it that only say something exited.
+  assert.ok(text.includes('Fatal error: Pulling multi-arch images locally is not supported.'), text);
+  assert.ok(text.includes('- Pull a specific platform'), 'the remedy the tool printed is part of the reason');
+
+  // Those wrappers are last in the log, so they win on recency unless demoted —
+  // they belong in the excerpt, under the cause, never as its anchor.
+  assert.ok(text.includes('The command exited with status 2'), text);
+
+  // Nothing from the credential block, which sits a few lines above the anchor.
+  assert.ok(!/EXAMPLEsecret|EXAMPLEclientid|EXAMPLECID/.test(text), 'credentials must not reach the clipboard');
+
+  // And none of the noise above it.
+  assert.ok(!text.includes('Login Succeeded'), text);
+  assert.ok(!text.includes('WARNING! Using --password'), text);
 });
 
 test('htmlToText flattens an annotation, entities and all', () => {

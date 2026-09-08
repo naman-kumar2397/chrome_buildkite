@@ -7,9 +7,9 @@
 // undocumented and differ between payload shapes, so `jobLogUrls` tries
 // several — this says which ones can be dropped.
 //
-// Organisation and pipeline names are replaced in the output. Log content is
-// not printed beyond the first 160 characters of each response, but read what
-// it prints before pasting it anywhere. The full objects are left on
+// Organisation and pipeline names are replaced, and no log or annotation body
+// is printed at all — a build log is exactly where a pipeline's credentials
+// end up, so this reports shapes and sizes only. The full objects are left on
 // `window.__bk` for a closer look that stays in your browser.
 
 (async () => {
@@ -68,7 +68,8 @@
       out.logProbes.push({
         url: url.replace(org, 'ORG').replace(pipeline, 'PIPELINE').replace(id ?? '', 'JOBID'),
         status: r.status, contentType: ct, bytes: text.length, shape,
-        head: text.slice(0, 160),
+        // Deliberately no excerpt: a build log is where the credentials are.
+        looksLikeLog: /\bERROR\b|\bexit|\$ /i.test(text.slice(0, 4000)),
       });
     } catch (e) {
       out.logProbes.push({ url: url.replace(org, 'ORG').replace(pipeline, 'PIPELINE'), error: String(e) });
@@ -83,7 +84,7 @@
       const t = await r.text();
       out.annotations[path] = {
         status: r.status, contentType: (r.headers.get('content-type') || '').split(';')[0],
-        bytes: t.length, head: t.slice(0, 200),
+        bytes: t.length, hasAnnotations: /annotation/i.test(t.slice(0, 4000)),
       };
     } catch (e) { out.annotations[path] = String(e); }
   }

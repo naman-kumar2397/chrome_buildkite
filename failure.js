@@ -39,6 +39,64 @@ export function logLines(text) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Redaction
+//
+// A build log is full of things nobody meant to publish: a step that exports
+// credentials, a curl carrying a token, a registry login. This button exists to
+// put that log in a Slack message, so anything it copies has to be scrubbed on
+// the way out.
+//
+// It is a safety net, not a guarantee. It catches assignments to secret-ish
+// names, values that are simply too opaque to be anything else, and the token
+// shapes that are recognisable on sight. It does not understand a secret your
+// pipeline prints in prose, and it deliberately leaves ARNs, account ids and
+// hostnames alone — redacting those would gut the error message.
+// ---------------------------------------------------------------------------
+
+const REDACTED = '‹redacted›';
+
+// A variable name that has no business being in a paste.
+const SECRET_NAME = /(?:secret|token|passwd|password|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?id|credential|auth|bearer|signature|session|(?:^|_)cid)\b/i;
+
+// A value with no words in it and no spaces: a key, not a sentence.
+const OPAQUE = /^[A-Za-z0-9+/=_.:-]{20,}$/;
+
+/** Scrub one line of anything that looks like a credential. */
+export function redactSecrets(line) {
+  const text = String(line ?? '');
+  if (/-----BEGIN[^-]*PRIVATE KEY-----/.test(text)) return REDACTED;
+  return text
+    // Token shapes that are recognisable wherever they appear.
+    .replace(/\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA|ANVA)[0-9A-Z]{12,}\b/g, REDACTED)
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, REDACTED)
+    .replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g, REDACTED)
+    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED)
+    // Credentials inside a URL.
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, `$1${REDACTED}@`)
+    // The header first, taking the whole value with it, so the bearer rule
+    // below cannot redact what is left and leave two markers behind.
+    .replace(/\b(authorization\s*[:=]\s*).+$/i, `$1${REDACTED}`)
+    .replace(/\b(bearer\s+)[A-Za-z0-9._~+/-]{12,}=*/gi, `$1${REDACTED}`)
+    // A secret passed as a flag, but only when the value could be one: the
+    // string "--password" in a warning about --password must survive.
+    .replace(
+      /(--?(?:password|passwd|token|secret|api[_-]?key|access[_-]?key))([=\s]+)(\S{12,})/gi,
+      (m, flag, sep, value) => (OPAQUE.test(value) ? `${flag}${sep}${REDACTED}` : m),
+    )
+    // NAME=value, with or without `export`. Redacted when the name gives it
+    // away, or when the value is too opaque to be anything but a key.
+    .replace(
+      /\b([A-Za-z_][A-Za-z0-9_]*)=("[^"]*"|'[^']*'|[^\s;&|]+)/g,
+      (m, name, value) => {
+        const bare = value.replace(/^["']|["']$/g, '');
+        return SECRET_NAME.test(name) || (bare.length >= 20 && OPAQUE.test(bare))
+          ? `${name}=${REDACTED}`
+          : m;
+      },
+    );
+}
+
 // Buildkite's own section markers. They bound a cluster of output but are
 // never themselves the reason a build failed.
 const SECTION = /^(?:---|\+\+\+|~~~|\^\^\^)(?:\s|$)/;
@@ -47,13 +105,13 @@ const SECTION = /^(?:---|\+\+\+|~~~|\^\^\^)(?:\s|$)/;
 // Only the strongest match counts, so a stack trace under "Error:" cannot
 // out-score the error line itself.
 const SIGNALS = [
-  [12, /^\s*(?:##\[error\]|error|fatal|panic|failure)\b\s*[:/]/i],
+  [12, /^[\s\W]{0,4}(?:##\[error\]|error|fatal|panic|failure)\b\s*[:/]/i],
   [12, /\b(?:Traceback \(most recent call last\)|Segmentation fault|core dumped)\b/i],
   [11, /npm ERR!|\bpanic:|\bfatal error\b|\bAssertionError\b/i],
   [10, /^\s*(?:[✗✘×✖‼]|FAIL(?:ED|URE)?\b)/],
   [9, /\b\d+\s+(?:failing|failed|failures?|errors?)\b/i],
   [9, /\b[A-Z]\w*(?:Error|Exception|Failure)\b\s*[:(]/],
-  [8, /\b(?:exited with|exit status|exit code|returned)\s+(?!0\b)\d+/i],
+  [8, /\b(?:exited with|exit status|exit code|returned)\s+(?:status\s+)?(?!0\b)\d+/i],
   [7, /\b(?:cannot find|no such file|not found|permission denied|command not found|undefined reference|unresolved|connection refused|timed out)\b/i],
   [6, /\b(?:expected|assertion)\b.*\b(?:but|got|to be|to eq)\b/i],
   [5, /\b(?:error|failure|failed)\b/i],
@@ -69,6 +127,18 @@ const NOISE = [
   [-3, /^\s*(?:at|from|in)\s+\S+[:(]/], // a stack frame belongs under an anchor, not as one
 ];
 
+// A build system announcing that something underneath it failed. True, and
+// worth keeping in the excerpt, but never the cause — the cause is the output
+// just above, and these lines are the ones nearest the end, so left alone they
+// win on recency every time and bury it.
+const CONSEQUENCE = [
+  /^make(?:\[\d+\])?:\s*\*\*\*/,
+  /\bexited with (?:status|code)\s+\d+/i,
+  /\bthe command exited\b/i,
+  /\b(?:hook|plugin|command|process|recipe)\s+(?:exited|failed)\b/i,
+];
+const CONSEQUENCE_CAP = 2;
+
 /** How likely a single line is to be the reason the build failed. */
 export function scoreLine(line) {
   let score = 0;
@@ -78,6 +148,9 @@ export function scoreLine(line) {
   for (const [penalty, re] of NOISE) {
     if (re.test(line)) score += penalty;
   }
+  // Still able to anchor a log that has nothing else to offer, never able to
+  // outrank a line that actually says what went wrong.
+  if (score > CONSEQUENCE_CAP && CONSEQUENCE.some((re) => re.test(line))) return CONSEQUENCE_CAP;
   return score;
 }
 
@@ -132,7 +205,8 @@ export function summariseLog(text, { maxLines = 12, maxChars = 900 } = {}) {
   for (let i = start; i < tail.length; i++) {
     if (lines.length >= maxLines) { truncated = true; break; }
     if (i > start && SECTION.test(tail[i])) break;
-    const line = tail[i].length > 200 ? `${tail[i].slice(0, 199)}…` : tail[i];
+    const clean = redactSecrets(tail[i]);
+    const line = clean.length > 200 ? `${clean.slice(0, 199)}…` : clean;
     if (chars + line.length > maxChars) { truncated = true; break; }
     chars += line.length + 1;
     lines.push(line);
@@ -176,7 +250,7 @@ export function isFailedJob(job) {
 /** A short name for a job, whatever the payload happens to call it. */
 export function jobLabel(job) {
   const raw = job?.name ?? job?.label ?? job?.step_label ?? job?.command ?? '';
-  const text = htmlToText(String(raw)).split('\n')[0].trim();
+  const text = redactSecrets(htmlToText(String(raw)).split('\n')[0]).trim();
   if (!text) return 'a step';
   return text.length > 80 ? `${text.slice(0, 79)}…` : text;
 }
