@@ -158,7 +158,13 @@ function renderDiscovery(settings, discovery, signedOut) {
     return;
   }
   const found = discovery.found ?? 0;
-  const parts = [`${found} running build${found === 1 ? '' : 's'} found`];
+  const blocked = discovery.blocked ?? 0;
+  const running = Math.max(0, found - blocked);
+  // A build waiting for input is not a build in progress, and saying so was
+  // how three blocked builds read as three running ones.
+  const parts = [blocked
+    ? `${running} running, ${blocked} waiting for input`
+    : `${found} running build${found === 1 ? '' : 's'} found`];
   if (discovery.capped) parts.push('cap reached');
   parts.push(`via ${discovery.provider}`);
   parts.push(`checked ${ago(discovery.at)}`);

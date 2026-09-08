@@ -315,7 +315,7 @@ async function discoverBuilds() {
       return;
     }
 
-    const { toWatch, baseline, activeCount } = diffDiscovered(builds, {
+    const { toWatch, baseline, activeCount, blockedCount } = diffDiscovered(builds, {
       watched: Object.keys(watches),
       baseline: stored.baseline,
       dismissed,
@@ -355,6 +355,7 @@ async function discoverBuilds() {
       provider,
       error: null,
       found: activeCount,
+      blocked: blockedCount,
       watchedThisCycle: toWatch.length,
       capped: toWatch.length >= settings.autoWatchCap,
     });

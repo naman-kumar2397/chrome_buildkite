@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   stripAnsi, logLines, scoreLine, summariseLog, htmlToText, isFailedJob, jobLabel,
   pickFailedJobs, formatReport, jobLogUrls, extractLogText, extractAnnotations, buildFailureReport,
-  redactSecrets, pickSteps, flattenSteps, stepsUrls, annotationCount,
+  redactSecrets, pickSteps, flattenSteps, stepsUrls, annotationCount, jobIdOf,
 } from '../failure.js';
 
 const ESC = String.fromCharCode(27);
@@ -236,6 +236,19 @@ test('formatReport names several failed steps and counts the rest', () => {
   const jobs = ['a', 'b', 'c', 'd'].map((name) => ({ name, state: 'failed' }));
   assert.ok(formatReport({ pipeline: 'p', number: 1, url: 'u', jobs })
     .includes('Failed steps: a, b, c, +1 more'));
+});
+
+test('jobIdOf prefers the job the step ran over the step itself', () => {
+  // A log URL built from the step's own uuid 404s; the job is named in the
+  // step's statistics.
+  assert.equal(jobIdOf({ uuid: 'step-uuid', statistics: { latest_job_id: 'job-uuid' } }), 'job-uuid');
+  assert.equal(jobIdOf({ uuid: 'only-uuid' }), 'only-uuid');
+  assert.equal(jobIdOf({ id: 'an-id' }), 'an-id');
+  assert.equal(jobIdOf({}), null);
+});
+
+test('pickSteps reads the records key the jobs endpoint uses', () => {
+  assert.deepEqual(pickSteps({ records: [{ a: 1 }], has_next_page: false }), [{ a: 1 }]);
 });
 
 test('jobLogUrls prefers what the job says over the assembled guesses', () => {

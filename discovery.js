@@ -136,7 +136,8 @@ export function isActive(build) {
  * Decide which discovered builds to start watching.
  * Excludes anything already watched, anything in the first-run baseline, and
  * anything the user explicitly unwatched.
- * @returns {{toWatch: Array, baseline: string[]}} baseline is the pruned set.
+ * @returns {{toWatch: Array, baseline: string[], activeCount: number, blockedCount: number}}
+ *   baseline is the pruned set.
  */
 export function diffDiscovered(builds, { watched = [], baseline = [], dismissed = [], cap = 25 } = {}) {
   const active = (builds ?? []).filter(isActive);
@@ -153,7 +154,11 @@ export function diffDiscovered(builds, { watched = [], baseline = [], dismissed 
   // without bound and a rebuilt number is not suppressed forever.
   const prunedBaseline = [...baselineSet].filter((u) => activeUrls.has(u));
 
-  return { toWatch, baseline: prunedBaseline, activeCount: active.length };
+  // Blocked builds are worth watching — someone has to unblock them — but they
+  // are not running, and reporting them as such is how three builds waiting for
+  // input get counted as three builds in progress.
+  const blockedCount = active.filter((b) => b.blocked).length;
+  return { toWatch, baseline: prunedBaseline, activeCount: active.length, blockedCount };
 }
 
 // ---------------------------------------------------------------------------

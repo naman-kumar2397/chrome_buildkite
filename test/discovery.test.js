@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   pickList, parseBuildList, extractBuildsFromHtml, isActive, diffDiscovered, fetchBuildList,
 } from '../discovery.js';
+import { normalise } from '../status.js';
 
 const U = (n, p = 'web') => `https://buildkite.com/acme/${p}/builds/${n}`;
 
@@ -167,4 +168,17 @@ test('fetchBuildList stops trying other paths once one says not signed in', asyn
   const fetchImpl = async () => { calls += 1; return res({ ok: false, status: 401 }); };
   await assert.rejects(fetchBuildList({ fetchImpl }), (err) => err.code === 'auth');
   assert.equal(calls, 2, 'one json attempt plus the html provider, not every candidate path');
+});
+
+test('blocked builds are counted separately from running ones', () => {
+  // A real listing: some finished, some waiting for input, one actually running.
+  const builds = [
+    { url: 'a', ...normalise({ state: 'passed' }) },
+    { url: 'b', ...normalise({ state: 'running' }) },
+    { url: 'c', ...normalise({ state: 'running', blocked_state: 'blocked' }) },
+    { url: 'd', ...normalise({ state: 'passed', blocked: true }) },
+  ];
+  const { activeCount, blockedCount } = diffDiscovered(builds, { baseline: [] });
+  assert.equal(activeCount, 3, 'blocked builds are still worth watching');
+  assert.equal(blockedCount, 2, 'but they are not running');
 });

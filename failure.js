@@ -271,7 +271,7 @@ export function jobLabel(job) {
 export function pickSteps(body) {
   if (Array.isArray(body)) return body;
   if (!body || typeof body !== 'object') return null;
-  for (const key of ['steps', 'jobs', 'data', 'results', 'items']) {
+  for (const key of ['steps', 'jobs', 'records', 'data', 'results', 'items']) {
     if (Array.isArray(body[key])) return body[key];
   }
   return Array.isArray(body.data?.steps) ? body.data.steps : null;
@@ -371,6 +371,17 @@ export function formatReport({ pipeline, number, url, state = 'failed', jobs = [
  * differ between payload shapes, so anything the job object itself offers is
  * tried before the assembled guesses.
  */
+/**
+ * The id that addresses a job's log.
+ *
+ * A step's own `uuid` is the step's, not the job's, and a log URL built from it
+ * 404s. The job that ran it is named inside the step's statistics as
+ * `latest_job_id`, so that wins wherever it exists.
+ */
+export function jobIdOf(job) {
+  return job?.statistics?.latest_job_id ?? job?.job_id ?? job?.id ?? job?.uuid ?? null;
+}
+
 export function jobLogUrls(buildUrl, job) {
   const origin = `https://${HOSTS[0]}`;
   const abs = (p) => (p.startsWith('http') ? p : `${origin}${p.startsWith('/') ? '' : '/'}${p}`);
@@ -381,7 +392,7 @@ export function jobLogUrls(buildUrl, job) {
     if (/log/i.test(key)) urls.push(abs(v));
     else urls.push(`${abs(v).replace(/\/$/, '')}/log`, `${abs(v).replace(/\/$/, '')}/raw_log`);
   }
-  const id = job?.id ?? job?.uuid;
+  const id = jobIdOf(job);
   if (id) urls.push(`${buildUrl}/jobs/${id}/log`, `${buildUrl}/jobs/${id}/raw_log`);
   return [...new Set(urls)];
 }
