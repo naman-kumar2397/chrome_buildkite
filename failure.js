@@ -242,6 +242,18 @@ const FAILED_JOB_STATES = new Set(['failed', 'broken', 'timed_out', 'timing_out'
 export function isFailedJob(job) {
   if (!job || typeof job !== 'object') return false;
   if (job.soft_failed === true || job.soft_fail === true) return false;
+
+  // A step from the build page's own steps endpoint reports `state: "finished"`
+  // and puts the verdict in `outcome` (e.g. "hard_failed"), with no
+  // exit_status at all — so the state alone says nothing about whether it
+  // passed, and `finished` must never be read as a failure.
+  const outcome = String(job.outcome ?? '').trim().toLowerCase();
+  if (outcome) {
+    if (outcome.includes('soft_fail')) return false;
+    if (/fail|error|broken|timed_out/.test(outcome)) return true;
+    if (/pass|success|neutral|skip/.test(outcome)) return false;
+  }
+
   const exit = job.exit_status;
   if (exit !== null && exit !== undefined && exit !== '' && Number(exit) !== 0) return true;
   return FAILED_JOB_STATES.has(String(job.state ?? '').trim().toLowerCase());
@@ -522,9 +534,13 @@ export async function buildFailureReport(watch, deps = {}) {
   if (!jobs.length && build) {
     for (const url of stepsUrls(buildUrl, build)) {
       try {
-        const steps = pickSteps(JSON.parse(await getText(url, fetchImpl, 'application/json')));
-        const failed = flattenSteps(steps).filter(isFailedJob);
+        const steps = flattenSteps(pickSteps(JSON.parse(await getText(url, fetchImpl, 'application/json'))));
+        if (!steps.length) continue;
+        const failed = steps.filter(isFailedJob);
         if (failed.length) { jobs = failed; break; }
+        // The URL asked Buildkite for the failed steps and it returned some.
+        // Whatever they look like, its filter knows better than ours does.
+        if (url.includes('state=failed')) { jobs = steps; break; }
       } catch (err) {
         if (err?.code === 'auth') break;
       }

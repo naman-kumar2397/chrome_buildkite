@@ -356,6 +356,34 @@ test('buildFailureReport asks the steps endpoint when the build payload has no j
   assert.ok(report.includes('Fatal error: Pulling multi-arch images'), report);
 });
 
+test('isFailedJob reads the outcome field when there is no exit status', () => {
+  // What the build page's steps endpoint actually returns: finished, no exit.
+  assert.equal(isFailedJob({ state: 'finished', outcome: 'hard_failed' }), true);
+  assert.equal(isFailedJob({ state: 'finished', outcome: 'errored' }), true);
+  assert.equal(isFailedJob({ state: 'finished', outcome: 'soft_failed' }), false);
+  assert.equal(isFailedJob({ state: 'finished', outcome: 'passed' }), false);
+  // "finished" on its own is not a verdict either way.
+  assert.equal(isFailedJob({ state: 'finished' }), false);
+});
+
+test('a step endpoint asked for failures is trusted over our own classifier', async () => {
+  // The real payload has no exit_status and an outcome we may not recognise,
+  // but the URL asked for state=failed and Buildkite answered.
+  const fetchImpl = stubFetch({
+    '/builds/9696.json': JSON.stringify({
+      state: 'failed', jobs: [], build_data_base_path: '/acme/web/builds/9696/data',
+    }),
+    'steps?exclude_group_steps=true&state=failed': JSON.stringify([{
+      label: 'Download falcon image', state: 'finished', outcome: 'some_future_verdict',
+      uuid: '01a07ec8-fc1a-477b-a004-2e7576d3de0d',
+    }]),
+    '/jobs/01a07ec8-fc1a-477b-a004-2e7576d3de0d/log': 'Fatal error: no such image',
+  });
+  const { report, source } = await buildFailureReport(watch, { fetchImpl });
+  assert.ok(report.includes('Failed step: Download falcon image'), report);
+  assert.equal(source, 'log');
+});
+
 test('buildFailureReport prefers an annotation over the log', async () => {
   const fetchImpl = stubFetch({
     '/builds/9696.json': JSON.stringify({
