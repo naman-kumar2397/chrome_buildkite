@@ -255,10 +255,58 @@ export function jobLabel(job) {
   return text.length > 80 ? `${text.slice(0, 79)}…` : text;
 }
 
+/** Pull an array of steps out of whatever the steps endpoint returned. */
+export function pickSteps(body) {
+  if (Array.isArray(body)) return body;
+  if (!body || typeof body !== 'object') return null;
+  for (const key of ['steps', 'jobs', 'data', 'results', 'items']) {
+    if (Array.isArray(body[key])) return body[key];
+  }
+  return Array.isArray(body.data?.steps) ? body.data.steps : null;
+}
+
+/**
+ * A step can be a group holding the real jobs, so flatten one level. Buildkite
+ * is asked for `exclude_group_steps=true`, but the parameter is not guaranteed
+ * to be honoured by every payload shape.
+ */
+export function flattenSteps(steps) {
+  const out = [];
+  for (const step of steps ?? []) {
+    if (!step || typeof step !== 'object') continue;
+    const nested = [step.jobs, step.steps].find(Array.isArray);
+    if (nested?.length) out.push(...nested);
+    else out.push(step);
+  }
+  return out;
+}
+
 /** The failed jobs of a build. */
 export function pickFailedJobs(build) {
-  const jobs = [build?.jobs, build?.steps, build?.build?.jobs].find(Array.isArray) ?? [];
-  return jobs.filter(isFailedJob);
+  const jobs = [build?.jobs, build?.steps, build?.build?.jobs].find((a) => Array.isArray(a) && a.length) ?? [];
+  return flattenSteps(jobs).filter(isFailedJob);
+}
+
+/**
+ * Where a build's steps live when the build JSON does not carry them.
+ *
+ * The modern Buildkite build page loads its steps separately: `jobs` and
+ * `steps` are present but empty in `<build url>.json`, and the page preloads
+ * `<build>/data/steps?exclude_group_steps=true&state=failed` instead. The build
+ * payload names that base itself, as `build_data_base_path`.
+ */
+export function stepsUrls(buildUrl, build) {
+  const origin = `https://${HOSTS[0]}`;
+  const query = '?exclude_group_steps=true&state=failed';
+  const bases = [];
+  for (const raw of [build?.build_data_base_path, `${buildUrl}/data`]) {
+    if (typeof raw !== 'string' || !raw) continue;
+    const abs = raw.startsWith('http') ? raw : `${origin}${raw.startsWith('/') ? '' : '/'}${raw}`;
+    bases.push(abs.replace(/\/$/, ''));
+  }
+  // Narrowed to the failures first; the unfiltered list is the fallback for an
+  // instance that does not accept the parameters.
+  return [...new Set(bases.flatMap((b) => [`${b}/steps${query}`, `${b}/steps`]))];
 }
 
 // ---------------------------------------------------------------------------
@@ -386,8 +434,24 @@ async function getText(url, fetchImpl, accept) {
  * Annotations are written by the pipeline's own authors to say what went
  * wrong, so when a build has one it beats anything scraped out of a log.
  */
+/**
+ * How many annotations the build says it has. The build payload carries
+ * `annotation_counts_by_style` ({error: 2, info: 1, …}), so a build with none
+ * can skip the hunt for them entirely rather than spending two requests
+ * finding out. Returns null when the payload does not say.
+ */
+export function annotationCount(build) {
+  const counts = build?.annotation_counts_by_style;
+  if (!counts || typeof counts !== 'object') return null;
+  const values = Object.values(counts).filter((n) => Number.isFinite(Number(n)));
+  return values.length ? values.reduce((a, b) => a + Number(b), 0) : null;
+}
+
 async function annotationProvider({ buildUrl, build }, { fetchImpl }) {
   let found = extractAnnotations(build);
+  if (!found && annotationCount(build) === 0) {
+    throw new ProviderError('annotations: build reports none', 'unavailable');
+  }
   if (!found) {
     for (const url of annotationUrls(buildUrl)) {
       try {
@@ -452,7 +516,20 @@ export async function buildFailureReport(watch, deps = {}) {
     buildError = `build json: ${err?.message ?? String(err)}`;
   }
 
-  const jobs = pickFailedJobs(build);
+  let jobs = pickFailedJobs(build);
+  // `jobs` and `steps` come back present but empty on a modern build page,
+  // which loads them separately. Ask for them where the page itself does.
+  if (!jobs.length && build) {
+    for (const url of stepsUrls(buildUrl, build)) {
+      try {
+        const steps = pickSteps(JSON.parse(await getText(url, fetchImpl, 'application/json')));
+        const failed = flattenSteps(steps).filter(isFailedJob);
+        if (failed.length) { jobs = failed; break; }
+      } catch (err) {
+        if (err?.code === 'auth') break;
+      }
+    }
+  }
   const rawState = build?.state ? String(build.state).trim().toLowerCase() : (deps.state ?? 'failed');
   const state = rawState === 'started' || rawState === 'running' ? 'failed' : rawState;
 

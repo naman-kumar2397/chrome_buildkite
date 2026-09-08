@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   stripAnsi, logLines, scoreLine, summariseLog, htmlToText, isFailedJob, jobLabel,
   pickFailedJobs, formatReport, jobLogUrls, extractLogText, extractAnnotations, buildFailureReport,
-  redactSecrets,
+  redactSecrets, pickSteps, flattenSteps, stepsUrls, annotationCount,
 } from '../failure.js';
 
 const ESC = String.fromCharCode(27);
@@ -189,6 +189,28 @@ test('pickFailedJobs finds the failures wherever the jobs array lives', () => {
   assert.deepEqual(pickFailedJobs(null), []);
 });
 
+test('pickSteps finds the array wherever the steps endpoint puts it', () => {
+  assert.deepEqual(pickSteps([{ a: 1 }]), [{ a: 1 }]);
+  assert.deepEqual(pickSteps({ steps: [{ a: 1 }] }), [{ a: 1 }]);
+  assert.deepEqual(pickSteps({ data: { steps: [{ a: 1 }] } }), [{ a: 1 }]);
+  assert.equal(pickSteps({ message: 'no' }), null);
+});
+
+test('flattenSteps unwraps a group step to the jobs inside it', () => {
+  const steps = [{ name: 'group', jobs: [{ name: 'a' }, { name: 'b' }] }, { name: 'plain' }];
+  assert.deepEqual(flattenSteps(steps).map((j) => j.name), ['a', 'b', 'plain']);
+  assert.deepEqual(flattenSteps([{ name: 'empty group', jobs: [] }]).map((j) => j.name), ['empty group']);
+  assert.deepEqual(flattenSteps(null), []);
+});
+
+test('stepsUrls follows the path the build payload names, then the conventional one', () => {
+  const urls = stepsUrls('https://buildkite.com/acme/web/builds/12',
+    { build_data_base_path: '/acme/web/builds/12/data' });
+  assert.equal(urls[0], 'https://buildkite.com/acme/web/builds/12/data/steps?exclude_group_steps=true&state=failed');
+  assert.ok(urls.includes('https://buildkite.com/acme/web/builds/12/data/steps'), 'unfiltered fallback');
+  assert.equal(new Set(urls).size, urls.length, 'no duplicates when both bases agree');
+});
+
 test('formatReport leads with the build and its link', () => {
   const text = formatReport({
     pipeline: 'web', number: 9696, url: 'https://buildkite.com/acme/web/builds/9696',
@@ -235,6 +257,43 @@ test('extractLogText reads plain text, JSON wrappers and chunk arrays — but no
   assert.equal(extractLogText(''), null);
 });
 
+test('annotationCount reads the build payload rather than guessing', () => {
+  assert.equal(annotationCount({ annotation_counts_by_style: { error: 2, info: 1 } }), 3);
+  assert.equal(annotationCount({ annotation_counts_by_style: {} }), null);
+  assert.equal(annotationCount({}), null, 'no opinion is not the same as none');
+  assert.equal(annotationCount({ annotation_counts_by_style: { error: 0 } }), 0);
+});
+
+test('a build reporting no annotations does not go hunting for them', async () => {
+  const seen = [];
+  const fetchImpl = async (url) => {
+    seen.push(url);
+    const body = url.endsWith('.json')
+      ? JSON.stringify({ state: 'failed', annotation_counts_by_style: {}, jobs: [{ state: 'failed', id: 'j1' }] })
+      : 'Error: boom';
+    return { ok: true, status: 200, url, headers: new Map(), text: async () => body };
+  };
+  // An empty counts object says nothing, so the hunt still runs.
+  await buildFailureReport(watch, { fetchImpl });
+  assert.ok(seen.some((u) => u.includes('/annotations')), 'no opinion means still look');
+
+  seen.length = 0;
+  const withZero = async (url) => {
+    seen.push(url);
+    const body = url.endsWith('.json')
+      ? JSON.stringify({
+        state: 'failed',
+        annotation_counts_by_style: { error: 0 },
+        jobs: [{ state: 'failed', id: 'j1' }],
+      })
+      : 'Error: boom';
+    return { ok: true, status: 200, url, headers: new Map(), text: async () => body };
+  };
+  const { source } = await buildFailureReport(watch, { fetchImpl: withZero });
+  assert.ok(!seen.some((u) => u.includes('/annotations')), `a stated zero saves the requests: ${seen}`);
+  assert.equal(source, 'log', 'and it goes straight to the log');
+});
+
 test('extractAnnotations puts the error style first', () => {
   const got = extractAnnotations({
     annotations: [
@@ -275,6 +334,26 @@ test('buildFailureReport reads the failed job log', async () => {
   assert.equal(source, 'log');
   assert.ok(report.includes('Failed step: RSpec (exit 1)'));
   assert.ok(report.includes('Error: table "widgets" does not exist'));
+});
+
+test('buildFailureReport asks the steps endpoint when the build payload has no jobs', async () => {
+  const fetchImpl = stubFetch({
+    // What a modern build page actually returns: the keys are there, empty.
+    '/builds/9696.json': JSON.stringify({
+      state: 'failed', jobs: [], steps: [],
+      build_data_base_path: '/acme/web/builds/9696/data',
+    }),
+    '/data/steps': JSON.stringify({
+      steps: [{ name: 'Build image', state: 'failed', exit_status: 2, id: 'j9' }],
+    }),
+    '/jobs/j9/log': 'Fatal error: Pulling multi-arch images locally is not supported.\n'
+      + 'make: *** [Makefile:9: download-falcon-image] Error 1\n',
+  });
+  const { report, source, error } = await buildFailureReport(watch, { fetchImpl });
+  assert.equal(error, undefined);
+  assert.equal(source, 'log');
+  assert.ok(report.includes('Failed step: Build image (exit 2)'), report);
+  assert.ok(report.includes('Fatal error: Pulling multi-arch images'), report);
 });
 
 test('buildFailureReport prefers an annotation over the log', async () => {
