@@ -2,7 +2,7 @@
 // prompt. Pure logic plus a provider chain, mirroring status.js and
 // discovery.js: no `chrome.*` at module scope, so Node can import it for tests.
 
-import { HOSTS, classifyResponse, resolveCode, ProviderError, pickBuild } from './status.js';
+import { HOSTS, classifyResponse, resolveCode, ProviderError, pickBuild, parseBuildUrl } from './status.js';
 
 // ---------------------------------------------------------------------------
 // Log text: getting from a raw Buildkite log to lines worth reading
@@ -307,18 +307,22 @@ export function pickFailedJobs(build) {
  * `<build>/data/steps?exclude_group_steps=true&state=failed` instead. The build
  * payload names that base itself, as `build_data_base_path`.
  */
-export function stepsUrls(buildUrl, build) {
+function dataBases(buildUrl, build) {
   const origin = `https://${HOSTS[0]}`;
-  const query = '?exclude_group_steps=true&state=failed';
-  const bases = [];
+  const out = [];
   for (const raw of [build?.build_data_base_path, `${buildUrl}/data`]) {
     if (typeof raw !== 'string' || !raw) continue;
     const abs = raw.startsWith('http') ? raw : `${origin}${raw.startsWith('/') ? '' : '/'}${raw}`;
-    bases.push(abs.replace(/\/$/, ''));
+    out.push(abs.replace(/\/$/, ''));
   }
+  return [...new Set(out)];
+}
+
+export function stepsUrls(buildUrl, build) {
+  const query = '?exclude_group_steps=true&state=failed';
   // Narrowed to the failures first; the unfiltered list is the fallback for an
   // instance that does not accept the parameters.
-  return [...new Set(bases.flatMap((b) => [`${b}/steps${query}`, `${b}/steps`]))];
+  return dataBases(buildUrl, build).flatMap((b) => [`${b}/steps${query}`, `${b}/steps`]);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,13 +397,50 @@ export function jobLogUrls(buildUrl, job) {
     else urls.push(`${abs(v).replace(/\/$/, '')}/log`, `${abs(v).replace(/\/$/, '')}/raw_log`);
   }
   const id = jobIdOf(job);
-  if (id) urls.push(`${buildUrl}/jobs/${id}/log`, `${buildUrl}/jobs/${id}/raw_log`);
+  if (id) {
+    // The one that actually answers: the log lives under /organizations, not
+    // under the build's own vanity path, which 404s.
+    const p = parseBuildUrl(buildUrl);
+    if (p) {
+      urls.push(`${origin}/organizations/${p.org}/pipelines/${p.pipeline}/builds/${p.number}/jobs/${id}/log`);
+    }
+    urls.push(`${buildUrl}/jobs/${id}/log`, `${buildUrl}/jobs/${id}/raw_log`);
+  }
   return [...new Set(urls)];
+}
+
+/**
+ * Where a build's jobs live. Preferred over the steps endpoint: a job record
+ * carries `base_path` — the exact log URL, no guessing — along with
+ * `exit_status`, `name` and `soft_failed`. A step record has none of those.
+ */
+export function jobsUrls(buildUrl, build) {
+  return dataBases(buildUrl, build).flatMap((b) => [`${b}/jobs?state=failed`, `${b}/jobs`]);
 }
 
 /** Where a build's annotations might live. */
 export function annotationUrls(buildUrl) {
   return [`${buildUrl}/annotations`, `${buildUrl}/annotations.json`];
+}
+
+// Buildkite prefixes every log line with the element that renders its
+// timestamp. Stripping tags without removing the element outright would leave
+// the timestamp duplicated as text at the head of each line.
+const TIME_ELEMENT = /<time\b[^>]*>[\s\S]*?<\/time>/gi;
+
+/**
+ * The web log endpoint returns its output as HTML: a `<time>` element per line
+ * and `<span>`s carrying what were ANSI colours. Reduce it to the text a
+ * terminal would have shown.
+ */
+export function decodeLogHtml(text) {
+  const body = String(text ?? '');
+  if (!/<time\b|<span\b|&(?:amp|lt|gt|quot|#\d+);/i.test(body)) return body;
+  return body
+    .replace(TIME_ELEMENT, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(nbsp|amp|lt|gt|quot|apos|#39|#x27);/gi, (m, e) => ENTITIES[e.toLowerCase()] ?? m);
 }
 
 /** Pull log text out of whatever the endpoint returned: JSON or plain text. */
@@ -411,17 +452,17 @@ export function extractLogText(text) {
     parsed = JSON.parse(body);
   } catch {
     // Not JSON, so it is either the log itself or a login/error page.
-    return /^\s*<(?:!doctype|html)\b/i.test(body.trimStart()) ? null : body;
+    return /^\s*<(?:!doctype|html)\b/i.test(body.trimStart()) ? null : decodeLogHtml(body);
   }
-  if (typeof parsed === 'string') return parsed || null;
-  for (const key of ['content', 'log', 'body', 'output', 'raw', 'text']) {
-    if (typeof parsed?.[key] === 'string' && parsed[key]) return parsed[key];
+  if (typeof parsed === 'string') return decodeLogHtml(parsed) || null;
+  for (const key of ['output', 'content', 'log', 'body', 'raw', 'text']) {
+    if (typeof parsed?.[key] === 'string' && parsed[key]) return decodeLogHtml(parsed[key]);
   }
   // Chunked logs: [{content}, {content}, …]
   const list = [parsed?.chunks, parsed?.lines, Array.isArray(parsed) ? parsed : null].find(Array.isArray);
   if (list) {
     const joined = list.map((c) => (typeof c === 'string' ? c : c?.content ?? c?.text ?? '')).join('');
-    if (joined.trim()) return joined;
+    if (joined.trim()) return decodeLogHtml(joined);
   }
   return null;
 }
@@ -543,7 +584,7 @@ export async function buildFailureReport(watch, deps = {}) {
   // `jobs` and `steps` come back present but empty on a modern build page,
   // which loads them separately. Ask for them where the page itself does.
   if (!jobs.length && build) {
-    for (const url of stepsUrls(buildUrl, build)) {
+    for (const url of [...jobsUrls(buildUrl, build), ...stepsUrls(buildUrl, build)]) {
       try {
         const steps = flattenSteps(pickSteps(JSON.parse(await getText(url, fetchImpl, 'application/json'))));
         if (!steps.length) continue;

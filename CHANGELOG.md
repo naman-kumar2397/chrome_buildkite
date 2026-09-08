@@ -18,6 +18,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a given Buildkite organisation, so the candidate lists in `failure.js` can be narrowed to what works.
 - `npm run banner`, a browser check covering the banner on an already-failed build through to the real
   clipboard. Added to CI alongside the permission, contrast and popup checks.
+- Every line copied is scrubbed of anything credential-shaped first — see CONTRIBUTING for what that does
+  and does not cover.
 - `npm run contrast` measures text contrast from rendered pixels in a real browser — both appearances, three
   page grounds — and fails below WCAG AA. Added to CI alongside the permission and smoke checks.
 - The browser checks now run on Playwright's bundled Chromium (Chrome for Testing) through one shared
@@ -26,6 +28,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   out waiting for its service worker. That failure now explains itself and names the fix.
 
 ### Changed
+- The popup counts blocked builds separately from running ones. `isActive` treats anything unfinished as
+  worth watching, which is right — someone has to unblock a blocked build — but the popup reported the lot
+  as "running builds found", so three builds waiting for input read as three builds in progress.
 - The in-page banner now appears on a build that has already finished, when it finished badly. It used to
   drop anything already over, on the grounds that there was nothing left to wait for; a failed build has its
   reason to offer. A finished build that passed still raises nothing.

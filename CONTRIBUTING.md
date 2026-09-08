@@ -111,14 +111,45 @@ Two providers, best first:
 
 1. **Annotations.** `<build url>.json` may carry them inline; otherwise `<build url>/annotations`. Error
    style ranks above warning above the rest. An annotation is a human already writing down what broke, so
-   nothing scraped can beat it.
-2. **The failed step's log.** The failed jobs come from the build JSON — non-zero `exit_status`, or a state
-   of `failed`/`broken`/`timed_out`, with `soft_failed` forgiven. Its log is fetched from whichever
-   candidate URL answers first (`jobLogUrls`), and the body may be plain text or JSON with the log under
-   `content`.
+   nothing scraped can beat it. The build payload's `annotation_counts_by_style` is checked first, so a
+   build that says it has none does not spend requests finding out.
+2. **The failed step's log**, found through the endpoints below.
 
 Neither is required. A build whose log cannot be read still copies as one line naming it and linking it,
 which is the part someone needs in order to ask for help.
+
+### The endpoints, as confirmed against a real organisation
+
+Every one of these was arrived at by probing, not documentation. `scripts/probe-failure.js` re-runs the
+whole hunt on any account.
+
+| Step | Endpoint | Notes |
+|---|---|---|
+| Build | `<build url>.json` | `jobs` and `steps` are **present but empty** on a modern build page |
+| Jobs | `<build_data_base_path>/jobs?state=failed` | array under `records`; the good source — job records carry `base_path`, `exit_status`, `name`, `soft_failed` |
+| Steps | `<build_data_base_path>/steps?exclude_group_steps=true&state=failed` | fallback; step records have `outcome` (`hard_failed`) and no `exit_status`, and name their job only as `statistics.latest_job_id` |
+| Log | `/organizations/<org>/pipelines/<pipeline>/builds/<n>/jobs/<job id>/log` | the job record's own `base_path` + `/log` is the same thing |
+
+Three traps, each of which cost a round of probing:
+
+- **A step's `uuid` is not its job's.** Every log URL built from it 404s. `jobIdOf` reads
+  `statistics.latest_job_id` first for exactly this reason.
+- **The log under the build's vanity path 404s.** `/<org>/<pipeline>/builds/<n>/jobs/<id>/log` returns the
+  build page as `text/html`; only the `/organizations/…` path answers.
+- **The log body is HTML.** It arrives under `output`, with a `<time>` element in front of every line and
+  `<span>`s where the ANSI colours were. `decodeLogHtml` removes the `<time>` element outright — unwrapping
+  it would leave the timestamp duplicated as text at the head of each line — and keeps the rest.
+
+### Nothing that is copied is unredacted
+
+`redactSecrets` runs over every line on its way into the excerpt, and over a job's label. It catches
+assignments whose name gives them away, values too opaque to be anything but a key, and the shapes that are
+recognisable on sight: AWS ids, GitHub and Slack tokens, JWTs, bearer headers, credentials inside a URL,
+private key blocks.
+
+It is a safety net, not a guarantee, and deliberately narrow: ARNs, account ids and hostnames stay, because
+removing those would gut the error message. It exists because a real build under test exported CrowdStrike
+credentials in the step that failed, six lines above the anchor.
 
 ### Picking the passage
 

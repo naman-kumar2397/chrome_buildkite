@@ -5,6 +5,7 @@ import {
   stripAnsi, logLines, scoreLine, summariseLog, htmlToText, isFailedJob, jobLabel,
   pickFailedJobs, formatReport, jobLogUrls, extractLogText, extractAnnotations, buildFailureReport,
   redactSecrets, pickSteps, flattenSteps, stepsUrls, annotationCount, jobIdOf,
+  decodeLogHtml, jobsUrls,
 } from '../failure.js';
 
 const ESC = String.fromCharCode(27);
@@ -261,6 +262,40 @@ test('jobLogUrls prefers what the job says over the assembled guesses', () => {
   assert.deepEqual(jobLogUrls('https://buildkite.com/a/b/builds/1', {}), []);
 });
 
+test('decodeLogHtml removes the timestamp element rather than unwrapping it', () => {
+  // Buildkite's real shape. Unwrapping the tag would leave the timestamp
+  // duplicated as text at the head of the line.
+  const raw = '<time datetime="2026-09-01T06:42:58.546Z">2026-09-01T06:42:58.546Z</time>'
+    + '~~~ Running global environment hook\n';
+  assert.equal(decodeLogHtml(raw), '~~~ Running global environment hook\n');
+});
+
+test('decodeLogHtml keeps the text inside colour spans, and decodes entities', () => {
+  assert.equal(decodeLogHtml('<span class="term-fg31">Error:</span> a &amp; b &lt;x&gt;'),
+    'Error: a & b <x>');
+  assert.equal(decodeLogHtml('plain log, no markup'), 'plain log, no markup');
+});
+
+test('extractLogText reads the output key the web log endpoint uses, decoded', () => {
+  const body = JSON.stringify({
+    output: '<time datetime="2026-09-01T06:42:58.546Z">2026-09-01T06:42:58.546Z</time>Error: boom\n',
+    truncated: false, streaming: false,
+  });
+  assert.equal(extractLogText(body), 'Error: boom\n');
+});
+
+test('jobsUrls asks for the failures first, on both bases', () => {
+  const urls = jobsUrls('https://buildkite.com/acme/web/builds/165',
+    { build_data_base_path: '/acme/web/builds/165/data' });
+  assert.equal(urls[0], 'https://buildkite.com/acme/web/builds/165/data/jobs?state=failed');
+  assert.ok(urls.includes('https://buildkite.com/acme/web/builds/165/data/jobs'));
+});
+
+test('jobLogUrls puts the /organizations path first — the build path 404s', () => {
+  const urls = jobLogUrls('https://buildkite.com/acme/web/builds/165', { id: 'job-1' });
+  assert.equal(urls[0], 'https://buildkite.com/organizations/acme/pipelines/web/builds/165/jobs/job-1/log');
+});
+
 test('extractLogText reads plain text, JSON wrappers and chunk arrays — but not an HTML page', () => {
   assert.equal(extractLogText('raw log text'), 'raw log text');
   assert.equal(extractLogText('{"content":"from json"}'), 'from json');
@@ -395,6 +430,49 @@ test('a step endpoint asked for failures is trusted over our own classifier', as
   const { report, source } = await buildFailureReport(watch, { fetchImpl });
   assert.ok(report.includes('Failed step: Download falcon image'), report);
   assert.equal(source, 'log');
+});
+
+test('buildFailureReport reads real Buildkite shapes end to end', async () => {
+  // Exactly what the endpoints return: an empty jobs array in the build
+  // payload, job records under `records` with base_path, and an HTML log
+  // under `output`.
+  const jobRecord = (name, uuid) => ({
+    id: uuid, name, state: 'finished', exit_status: 1, soft_failed: false,
+    base_path: `/organizations/acme/pipelines/web/builds/165/jobs/${uuid}`,
+  });
+  const fetchImpl = stubFetch({
+    '/builds/9696.json': JSON.stringify({
+      state: 'failed', jobs: [], steps: [],
+      build_data_base_path: '/acme/web/builds/9696/data',
+      annotation_counts_by_style: {},
+    }),
+    '/data/jobs?state=failed': JSON.stringify({
+      records: [
+        jobRecord(':terraform: [cognito] Apply (prod)', 'j1'),
+        jobRecord(':terraform: [database] Apply (prod)', 'j2'),
+        jobRecord(':terraform: [datadog-activate-dashboard] Apply (prod)', 'j3'),
+      ],
+      has_next_page: false,
+    }),
+    '/jobs/j1/log': JSON.stringify({
+      output: '<time datetime="2026-09-01T06:42:58.546Z">2026-09-01T06:42:58.546Z</time>'
+        + '~~~ Running global environment hook\n'
+        + '<time datetime="2026-09-01T06:43:10.000Z">2026-09-01T06:43:10.000Z</time>'
+        + 'Error: creating Cognito User Pool: InvalidParameterException\n',
+      truncated: false,
+    }),
+  });
+
+  const { report, source, error } = await buildFailureReport(watch, { fetchImpl });
+  assert.equal(error, undefined);
+  assert.equal(source, 'log');
+  // All three failures named, not just the first.
+  assert.ok(report.includes('Failed steps: :terraform: [cognito] Apply (prod) (exit 1)'), report);
+  assert.ok(report.includes('[datadog-activate-dashboard]'), report);
+  // The log, with its markup gone.
+  assert.ok(report.includes('Error: creating Cognito User Pool: InvalidParameterException'), report);
+  assert.ok(!report.includes('<time'), 'no markup reaches the clipboard');
+  assert.ok(!report.includes('2026-09-01T06:43:10'), 'nor the timestamp it wrapped');
 });
 
 test('buildFailureReport prefers an annotation over the log', async () => {
