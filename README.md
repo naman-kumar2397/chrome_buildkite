@@ -78,9 +78,9 @@ colour-coded by outcome, so you always know what happened while you were away.
 
 ## And what actually broke
 
-A failed build's row carries a **Copy reason** button. It puts the build, its link, and the part of the
-log that explains the failure on your clipboard — ready to paste into Slack when you need a hand, or to
-hand to a model as a prompt:
+A failed build's row carries a **Copy reason** button — and so does the banner, when you open a build
+that failed. It puts the build, its link, and the part of the log that explains the failure on your
+clipboard — ready to paste into Slack when you need a hand, or to hand to a model as a prompt:
 
 ````
 Build web #9696 failed — https://buildkite.com/acme/web/builds/9696
@@ -103,6 +103,10 @@ one. The best line anchors a short excerpt, trimmed to something you can read in
 It reads the log only when you press the button, using the Buildkite session your browser already has,
 and the result goes to your clipboard and nowhere else. If the log can't be read you still get the first
 line — the build and its link, which is the part you needed in order to ask.
+
+Opening any build that failed is enough: the banner offers the reason whether or not you were ever
+watching it, so builds that broke while you were away are one click too. A build that passed still
+raises nothing.
 
 ## Nothing to set up
 

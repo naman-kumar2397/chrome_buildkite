@@ -10,6 +10,7 @@
     "pack": "node scripts/pack.mjs",
     "icons": "node scripts/make-icons.mjs",
     "smoke": "node scripts/popup-smoke.mjs",
+    "banner": "node scripts/banner-smoke.mjs",
     "assets": "node scripts/store-assets.mjs",
     "permissions": "node scripts/permissions-check.mjs",
     "contrast": "node scripts/contrast-check.mjs"

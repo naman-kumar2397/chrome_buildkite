@@ -12,7 +12,7 @@ background.js     service worker: watch store, 30 s alarm, provider chain, notif
 status.js         pure logic: URL parsing, state normalisation, event decisions, provider chain
 discovery.js      pure logic: parsing the /builds listing, baseline and dedupe rules, provider chain
 failure.js        pure logic: log cleaning, picking the passage that explains a failure, provider chain
-content.js        the in-page banner, plus DOM-state and DOM-build-list responders
+content.js        the in-page banner (watch, unwatch, copy a failure), plus the DOM responders
 offscreen.*       Web Audio chime synthesis (a service worker cannot play audio)
 popup.*           watch list, recently finished, test chimes, volume, diagnostics
 vendor/           Apple design tokens, copied verbatim from the design repo — do not hand-edit
@@ -37,6 +37,7 @@ npm i --no-save playwright && npx playwright install chromium
 npm run permissions   # proves no unnecessary permission has crept back in
 npm run contrast      # WCAG AA, measured from rendered pixels
 npm run smoke         # loads the extension, seeds storage, checks the popup and chime path
+npm run banner        # the in-page banner on a failed build, through to the real clipboard
 npm run icons         # regenerates the icons and the store icon from one drawing
 npm run assets        # regenerates the store screenshots from fictional data
 ```
@@ -45,10 +46,10 @@ npm run assets        # regenerates the store screenshots from fictional data
 `--load-extension` from branded builds in version 137 and ignores the flag silently: the browser starts
 and the extension is simply absent, and the first symptom is a timeout waiting for its service worker.
 `CHROME_PATH` may name a Chromium or Chrome for Testing binary kept elsewhere; it must never point at
-Google Chrome. All five scripts launch through `scripts/lib/browser.mjs`, which explains exactly this if
+Google Chrome. All six scripts launch through `scripts/lib/browser.mjs`, which explains exactly this if
 the extension fails to load.
 
-CI runs lint and the unit tests on every push, and the three browser checks in a second job. A `v*` tag
+CI runs lint and the unit tests on every push, and the four browser checks in a second job. A `v*` tag
 builds the zip and attaches it to a release, refusing if the tag disagrees with `manifest.json` and
 `package.json`.
 
@@ -93,9 +94,18 @@ link produces a fuller, redacted version of this for bug reports.
 
 ## Why a build failed
 
-The **Copy reason** button on a failed row in *Recently finished* sends `FAILURE_REPORT` to the service
-worker, which assembles the clipboard text on demand — not when the build chimed. Most failures are never
-shared, and a log is a request nobody asked for.
+**Copy reason** — on a failed row in *Recently finished*, and on the in-page banner when you open a build
+that failed — sends `FAILURE_REPORT` to the service worker, which assembles the clipboard text on demand,
+not when the build chimed. Most failures are never shared, and a log is a request nobody asked for.
+
+The banner is the reason a finished build now raises one at all: `detect()` used to drop anything already
+over, since there was nothing left to wait for. A failed build has something to offer, so it renders in a
+third mode alongside *watch* and *unwatch*. A finished build that passed is still dropped.
+
+Copying from a content script tries `navigator.clipboard.writeText` first — granted on a user gesture in a
+focused document — and falls back to selecting an off-screen textarea in the page's own DOM. That is what
+the page itself would do, so neither route needs the `clipboardWrite` permission; `npm run permissions`
+holds the surface to what it was.
 
 Two providers, best first:
 
