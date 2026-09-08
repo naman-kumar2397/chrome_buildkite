@@ -35,7 +35,13 @@ const OUTCOME = {
   input: { label: 'needs input', verb: 'Needed input' },
 };
 
+// The list re-renders every few seconds, which would replace a "Copy reason"
+// button mid-press and throw away what it was telling the user. Recently
+// finished only changes when a build chimes, so holding it still is free.
+let copying = 0;
+
 function renderRecent(recent) {
+  if (copying > 0) return;
   const section = document.getElementById('recent-section');
   const ul = document.getElementById('recent');
   section.hidden = recent.length === 0;
@@ -71,7 +77,57 @@ function renderRecent(recent) {
     info.appendChild(outcome);
 
     li.appendChild(info);
+    if (r.event === 'failure') li.appendChild(copyFailureButton(r));
     ul.appendChild(li);
+  }
+}
+
+/**
+ * "Copy reason" on a failed build: the build, its link and the passage of the
+ * log that explains it, ready to paste into Slack or hand to a model. The log
+ * is only fetched when the button is pressed.
+ */
+function copyFailureButton(r) {
+  const btn = document.createElement('button');
+  btn.className = 'compact';
+  btn.textContent = 'Copy reason';
+  btn.title = 'Copy the build, its link and why it failed';
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    copying += 1;
+    btn.textContent = 'Reading…';
+    const { report, source, error } = await send({ type: 'FAILURE_REPORT', url: r.url });
+    if (!report) {
+      btn.textContent = 'Failed';
+      btn.title = error ?? 'unknown error';
+    } else {
+      const copied = await copyText(report);
+      // Say which of the two it managed: the link alone is still worth having,
+      // but the user should not paste it expecting the error to be in there.
+      btn.textContent = !copied ? 'See console' : source ? 'Copied' : 'Link only';
+      btn.title = source
+        ? `Reason read from the ${source}`
+        : `Could not read the failure: ${error ?? 'unknown error'}`;
+    }
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Copy reason';
+      btn.title = 'Copy the build, its link and why it failed';
+      copying -= 1;
+    }, 4000);
+  });
+  return btn;
+}
+
+/** Clipboard writes can be refused in a popup; fall back to a console dump. */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    console.log(text);
+    return false;
   }
 }
 
@@ -194,14 +250,7 @@ document.getElementById('diagnostics').addEventListener('click', async (e) => {
     link.textContent = `Failed: ${error ?? 'unknown'}`;
     return;
   }
-  try {
-    await navigator.clipboard.writeText(report);
-    link.textContent = 'Copied — paste into an issue';
-  } catch {
-    // Clipboard can be refused in a popup; fall back to a console dump.
-    console.log(report);
-    link.textContent = 'See the popup console';
-  }
+  link.textContent = await copyText(report) ? 'Copied — paste into an issue' : 'See the popup console';
   setTimeout(() => { link.textContent = 'Copy diagnostics'; }, 4000);
 });
 

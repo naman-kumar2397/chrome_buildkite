@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Copy reason** on a failed build in *Recently finished*. It puts the build, its link and the passage of
+  the log that explains the failure on the clipboard, ready to paste into Slack or hand to a model. An
+  annotation published by the pipeline wins if there is one; otherwise the failed step's log is cleaned of
+  ANSI and Buildkite's own timestamps, scored line by line for what actually reads like a cause, and cut to
+  a short excerpt. The log is read only when the button is pressed, with the session the browser already
+  has, and a build whose log cannot be read still copies as its name and link. No model, no remote call.
+- `scripts/probe-failure.js`, a console script that reports which job-log and annotation endpoints answer on
+  a given Buildkite organisation, so the candidate lists in `failure.js` can be narrowed to what works.
+
 ### Fixed
 - The in-page banner rendered dark text on dark glass over Buildkite. It chose its contrast from
   `document.body`, which Buildkite leaves light while painting its dark theme on an inner wrapper. It now

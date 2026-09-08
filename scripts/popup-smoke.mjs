@@ -91,6 +91,7 @@ const dump = await page.evaluate(() => ({
     dot: li.querySelector('.dot')?.className,
     name: li.querySelector('.name')?.textContent,
     outcome: li.querySelector('.outcome')?.textContent,
+    copy: li.querySelector('button')?.textContent ?? null,
   })),
   watches: [...document.querySelectorAll('#watches li')].map((li) => ({
     name: li.querySelector('.name')?.textContent,
@@ -104,6 +105,9 @@ assert(dump.recentHidden === false, 'recent section should be visible');
 assert(dump.recent.length === 4, 'expected 4 recent rows');
 assert(dump.recent[0].outcome.startsWith('Passed'), 'first recent row should be a pass');
 assert(dump.recent[3].outcome.startsWith('Finished as "wrapped_up"'), 'unknown finish should show its raw state');
+assert(dump.recent.filter((r) => r.copy === 'Copy reason').length === 2,
+  'every failed build in Recently finished should offer to copy its reason');
+assert(dump.recent[0].copy === null, 'a passing build has no failure to copy');
 assert(dump.watches.some((w) => w.isError), 'erroring watch should be flagged');
 assert(dump.watches.some((w) => /· running ·/.test(w.meta)),
   'a normally running watch should read plainly, without the raw Buildkite state');
@@ -135,6 +139,16 @@ for (const kind of ['failure', 'input', 'watching']) {
 }
 await page.waitForTimeout(500);
 console.log('offscreen docs after chime:', (await ctx.backgroundPages()).length, 'bg,', ctx.serviceWorkers().length, 'sw');
+
+// The failure report must degrade to the build and its link when Buildkite
+// cannot be read at all — which is the case in this browser, signed out.
+const report = await page.evaluate(() => chrome.runtime.sendMessage({
+  type: 'FAILURE_REPORT', url: 'https://buildkite.com/acme/web/builds/9696',
+}));
+console.log('failure report:', JSON.stringify(report));
+assert(report && typeof report.report === 'string', 'FAILURE_REPORT should always return a report');
+assert(report.report.startsWith('Build web #9696 failed — https://buildkite.com/acme/web/builds/9696'),
+  `report should lead with the build and its link, got "${report.report}"`);
 
 // Clear-recent link works?
 await page.click('#clear-recent');

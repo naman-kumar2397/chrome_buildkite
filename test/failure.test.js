@@ -1,0 +1,240 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  stripAnsi, logLines, scoreLine, summariseLog, htmlToText, isFailedJob, jobLabel,
+  pickFailedJobs, formatReport, jobLogUrls, extractLogText, extractAnnotations, buildFailureReport,
+} from '../failure.js';
+
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+
+// A Buildkite log line as it actually arrives: an APC timestamp, then colour.
+const stamped = (t) => `${ESC}_bk;t=1699999999999${BEL}${t}`;
+
+test('stripAnsi removes colour, cursor moves and Buildkite timestamps', () => {
+  assert.equal(stripAnsi(stamped(`${ESC}[31mFAILED${ESC}[0m`)), 'FAILED');
+  assert.equal(stripAnsi(`${ESC}[2K${ESC}[1G done`), ' done');
+  assert.equal(stripAnsi('plain'), 'plain');
+  assert.equal(stripAnsi(null), '');
+});
+
+test('logLines collapses overwritten progress lines and immediate repeats', () => {
+  const log = ['10%\r55%\r100%', 'same', 'same', '', '   ', 'end'].join('\n');
+  assert.deepEqual(logLines(log), ['100%', 'same', 'end']);
+});
+
+test('scoreLine ranks a real error above a passing mention of the word', () => {
+  assert.ok(scoreLine('Error: connect ECONNREFUSED 127.0.0.1:5432') > scoreLine('Running error-handling specs'));
+  assert.ok(scoreLine('npm ERR! code ELIFECYCLE') > scoreLine('warning: 1 error in a comment'));
+  // "0 failures" is the summary of a passing run, not a cause.
+  assert.ok(scoreLine('12 examples, 0 failures') < 0);
+  // A stack frame is continuation, never the anchor.
+  assert.ok(scoreLine('AssertionError: expected 41 to eq 42') > scoreLine('    at Object.<anonymous> (spec.js:3:9)'));
+});
+
+test('summariseLog anchors on the failure, keeps one line of lead-in, and stops at the next section', () => {
+  const log = [
+    '--- :ruby: RSpec',
+    stamped('Randomized with seed 41234'),
+    stamped('...........F'),
+    stamped(''),
+    stamped('Failures:'),
+    stamped('  1) Widget#total sums the line items'),
+    stamped('     Failure/Error: expect(widget.total).to eq(42)'),
+    stamped('       expected: 42'),
+    stamped('            got: 41'),
+    '--- :arrow_up: Uploading artifacts',
+    stamped('Uploaded 3 files'),
+  ].join('\n');
+
+  const out = summariseLog(log);
+  assert.ok(out.anchored);
+  assert.ok(out.lines.includes('Failures:'), out.lines.join('\n'));
+  assert.ok(out.lines.some((l) => l.includes('expected: 42')));
+  // The artifact-upload section after the failure is not part of the reason.
+  assert.ok(!out.lines.some((l) => l.includes('Uploaded 3 files')), out.lines.join('\n'));
+});
+
+test('summariseLog prefers the real error over an earlier passing suite', () => {
+  const log = [
+    '20 examples, 0 failures',
+    'Running the integration suite',
+    'Error: connect ECONNREFUSED 127.0.0.1:5432',
+    '  at Socket.emit (node:events:518:28)',
+  ].join('\n');
+  const out = summariseLog(log);
+  assert.ok(out.lines[0].includes('Error: connect ECONNREFUSED')
+    || out.lines[1]?.includes('Error: connect ECONNREFUSED'), out.lines.join('\n'));
+  assert.ok(!out.lines.some((l) => l.includes('0 failures')), out.lines.join('\n'));
+});
+
+test('summariseLog falls back to the tail when nothing scores, and reports truncation', () => {
+  const log = Array.from({ length: 50 }, (_, i) => `step ${i}`).join('\n');
+  const out = summariseLog(log, { maxLines: 4 });
+  assert.equal(out.anchored, false);
+  assert.deepEqual(out.lines, ['step 46', 'step 47', 'step 48', 'step 49']);
+});
+
+test('summariseLog caps its own size', () => {
+  const log = `Error: boom\n${'x'.repeat(5000)}`;
+  const out = summariseLog(log, { maxChars: 120 });
+  assert.ok(out.truncated);
+  assert.ok(out.lines.join('\n').length <= 220); // one line, itself clamped to 200
+});
+
+test('summariseLog gives nothing back for an empty log', () => {
+  assert.equal(summariseLog(''), null);
+  assert.equal(summariseLog(`${ESC}[0m\n\n`), null);
+});
+
+test('htmlToText flattens an annotation, entities and all', () => {
+  assert.equal(
+    htmlToText('<p>Build failed:</p><ul><li>spec &amp; feature</li><li>lint</li></ul>'),
+    'Build failed:\n• spec & feature\n• lint',
+  );
+  assert.equal(htmlToText('<style>p{color:red}</style><p>only this</p>'), 'only this');
+});
+
+test('isFailedJob reads exit status and state, and forgives a soft failure', () => {
+  assert.equal(isFailedJob({ state: 'passed', exit_status: 1 }), true);
+  assert.equal(isFailedJob({ state: 'failed' }), true);
+  assert.equal(isFailedJob({ state: 'broken', exit_status: null }), true);
+  assert.equal(isFailedJob({ state: 'passed', exit_status: 0 }), false);
+  assert.equal(isFailedJob({ state: 'failed', exit_status: 1, soft_failed: true }), false);
+  assert.equal(isFailedJob({ type: 'waiter' }), false);
+  assert.equal(isFailedJob(null), false);
+});
+
+test('jobLabel copes with every name a payload might use', () => {
+  assert.equal(jobLabel({ name: ':rspec: RSpec' }), ':rspec: RSpec');
+  assert.equal(jobLabel({ command: 'make test\nmake lint' }), 'make test');
+  assert.equal(jobLabel({}), 'a step');
+  assert.equal(jobLabel({ name: 'x'.repeat(200) }).length, 80);
+});
+
+test('pickFailedJobs finds the failures wherever the jobs array lives', () => {
+  const jobs = [{ state: 'passed' }, { state: 'failed', name: 'RSpec' }];
+  assert.deepEqual(pickFailedJobs({ jobs }).map((j) => j.name), ['RSpec']);
+  assert.deepEqual(pickFailedJobs({ steps: jobs }).map((j) => j.name), ['RSpec']);
+  assert.deepEqual(pickFailedJobs({}), []);
+  assert.deepEqual(pickFailedJobs(null), []);
+});
+
+test('formatReport leads with the build and its link', () => {
+  const text = formatReport({
+    pipeline: 'web', number: 9696, url: 'https://buildkite.com/acme/web/builds/9696',
+    jobs: [{ name: 'RSpec', exit_status: 1 }],
+    reason: { lines: ['Error: boom'], truncated: false },
+  });
+  assert.equal(text.split('\n')[0], 'Build web #9696 failed — https://buildkite.com/acme/web/builds/9696');
+  assert.ok(text.includes('Failed step: RSpec (exit 1)'));
+  assert.ok(text.includes('```\nError: boom\n```'));
+});
+
+test('formatReport still says something useful with no reason and no jobs', () => {
+  const text = formatReport({ pipeline: 'web', number: 12, url: 'https://buildkite.com/acme/web/builds/12' });
+  assert.equal(text, 'Build web #12 failed — https://buildkite.com/acme/web/builds/12');
+});
+
+test('formatReport tells the truth about a build that was canceled, not failed', () => {
+  const text = formatReport({ pipeline: 'web', number: 12, url: 'u', state: 'canceled' });
+  assert.ok(text.startsWith('Build web #12 was canceled'));
+});
+
+test('formatReport names several failed steps and counts the rest', () => {
+  const jobs = ['a', 'b', 'c', 'd'].map((name) => ({ name, state: 'failed' }));
+  assert.ok(formatReport({ pipeline: 'p', number: 1, url: 'u', jobs })
+    .includes('Failed steps: a, b, c, +1 more'));
+});
+
+test('jobLogUrls prefers what the job says over the assembled guesses', () => {
+  const urls = jobLogUrls('https://buildkite.com/acme/web/builds/9', {
+    id: 'job-uuid', base_path: '/acme/web/builds/9/jobs/job-uuid',
+  });
+  assert.equal(urls[0], 'https://buildkite.com/acme/web/builds/9/jobs/job-uuid/log');
+  assert.ok(urls.includes('https://buildkite.com/acme/web/builds/9/jobs/job-uuid/raw_log'));
+  assert.equal(new Set(urls).size, urls.length, 'no duplicates');
+  assert.deepEqual(jobLogUrls('https://buildkite.com/a/b/builds/1', {}), []);
+});
+
+test('extractLogText reads plain text, JSON wrappers and chunk arrays — but not an HTML page', () => {
+  assert.equal(extractLogText('raw log text'), 'raw log text');
+  assert.equal(extractLogText('{"content":"from json"}'), 'from json');
+  assert.equal(extractLogText('[{"content":"a"},{"content":"b"}]'), 'ab');
+  assert.equal(extractLogText('<!doctype html><html>login</html>'), null);
+  assert.equal(extractLogText('{"message":"nope"}'), null);
+  assert.equal(extractLogText(''), null);
+});
+
+test('extractAnnotations puts the error style first', () => {
+  const got = extractAnnotations({
+    annotations: [
+      { style: 'info', body_html: '<p>built at 09:00</p>' },
+      { style: 'error', body_html: '<p>3 specs failed</p>' },
+    ],
+  });
+  assert.deepEqual(got.map((a) => a.text), ['3 specs failed', 'built at 09:00']);
+  assert.equal(extractAnnotations({ annotations: [] }), null);
+  assert.equal(extractAnnotations({}), null);
+});
+
+// ---------------------------------------------------------------------------
+// The whole path, with fetch stubbed
+// ---------------------------------------------------------------------------
+
+function stubFetch(routes) {
+  return async (url) => {
+    const hit = Object.keys(routes).find((k) => url.includes(k));
+    if (!hit) return { ok: false, status: 404, url, headers: new Map() };
+    const r = routes[hit];
+    return { ok: true, status: 200, url, headers: new Map(), text: async () => r };
+  };
+}
+
+const watch = { pipeline: 'web', number: 9696, url: 'https://buildkite.com/acme/web/builds/9696' };
+
+test('buildFailureReport reads the failed job log', async () => {
+  const fetchImpl = stubFetch({
+    '/builds/9696.json': JSON.stringify({
+      state: 'failed',
+      jobs: [{ name: 'RSpec', state: 'failed', exit_status: 1, id: 'j1' }],
+    }),
+    '/jobs/j1/log': JSON.stringify({ content: 'setup ok\nError: table "widgets" does not exist\n' }),
+  });
+  const { report, source, error } = await buildFailureReport(watch, { fetchImpl });
+  assert.equal(error, undefined);
+  assert.equal(source, 'log');
+  assert.ok(report.includes('Failed step: RSpec (exit 1)'));
+  assert.ok(report.includes('Error: table "widgets" does not exist'));
+});
+
+test('buildFailureReport prefers an annotation over the log', async () => {
+  const fetchImpl = stubFetch({
+    '/builds/9696.json': JSON.stringify({
+      state: 'failed',
+      annotations: [{ style: 'error', body_html: '<p>3 specs failed in checkout</p>' }],
+      jobs: [{ name: 'RSpec', state: 'failed', id: 'j1' }],
+    }),
+    '/jobs/j1/log': 'Error: something less specific',
+  });
+  const { report, source } = await buildFailureReport(watch, { fetchImpl });
+  assert.equal(source, 'annotation');
+  assert.ok(report.includes('3 specs failed in checkout'));
+  assert.ok(!report.includes('something less specific'));
+});
+
+test('buildFailureReport still returns the build and link when nothing can be read', async () => {
+  const { report, source, error } = await buildFailureReport(watch, { fetchImpl: stubFetch({}) });
+  assert.equal(report, 'Build web #9696 failed — https://buildkite.com/acme/web/builds/9696');
+  assert.equal(source, null);
+  assert.ok(error.includes('build json'));
+});
+
+test('buildFailureReport reports being signed out rather than a wall of failures', async () => {
+  const fetchImpl = async () => ({
+    ok: true, status: 200, url: 'https://buildkite.com/login', headers: new Map(), text: async () => '',
+  });
+  const { source, error } = await buildFailureReport(watch, { fetchImpl });
+  assert.equal(source, null);
+  assert.equal(error, 'not signed in to Buildkite');
+});

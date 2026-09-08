@@ -3,6 +3,7 @@
 
 import { fetchStatus, decideEvent, parseBuildUrl, describe, classifyResponse, pickBuild } from './status.js';
 import { fetchBuildList, diffDiscovered, pickList, parseBuildList, extractBuildsFromHtml } from './discovery.js';
+import { buildFailureReport } from './failure.js';
 
 const ALARM = 'bk-poll';
 const DISCOVER_ALARM = 'bk-discover';
@@ -571,6 +572,20 @@ async function handleMessage(msg) {
       await discoverBuilds();
       const { discoveryState = {} } = await chrome.storage.local.get('discoveryState');
       return { ok: true, discovery: discoveryState };
+    }
+    case 'FAILURE_REPORT': {
+      // Gathered on demand rather than at chime time: most failures are never
+      // shared, and a log costs a request the user did not ask for.
+      const parsed = parseBuildUrl(msg.url);
+      if (!parsed) return { error: 'not a build url' };
+      const { recent = [] } = await chrome.storage.local.get('recent');
+      const entry = recent.find((r) => r.url === parsed.url);
+      const result = await buildFailureReport(
+        { ...parsed, pipeline: entry?.pipeline ?? parsed.pipeline, number: entry?.number ?? parsed.number },
+        { state: entry?.rawState ?? entry?.state },
+      );
+      if (result.error) console.warn(`[bk-watcher] failure report incomplete: ${result.error}`);
+      return result;
     }
     case 'CLEAR_RECENT': {
       await chrome.storage.local.set({ recent: [] });

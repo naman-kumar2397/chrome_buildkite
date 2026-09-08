@@ -11,6 +11,7 @@ manifest.json     permissions, content-script matches, offscreen + alarms
 background.js     service worker: watch store, 30 s alarm, provider chain, notifications, chimes
 status.js         pure logic: URL parsing, state normalisation, event decisions, provider chain
 discovery.js      pure logic: parsing the /builds listing, baseline and dedupe rules, provider chain
+failure.js        pure logic: log cleaning, picking the passage that explains a failure, provider chain
 content.js        the in-page banner, plus DOM-state and DOM-build-list responders
 offscreen.*       Web Audio chime synthesis (a service worker cannot play audio)
 popup.*           watch list, recently finished, test chimes, volume, diagnostics
@@ -89,6 +90,55 @@ fetch(location.pathname + '.json', { credentials: 'include', headers: { Accept: 
 A `state` in the output means provider 1 is working and polling is cheap and exact. If you get HTML or
 an error the extension silently falls through to providers 2 and 3. The popup's **Copy diagnostics**
 link produces a fuller, redacted version of this for bug reports.
+
+## Why a build failed
+
+The **Copy reason** button on a failed row in *Recently finished* sends `FAILURE_REPORT` to the service
+worker, which assembles the clipboard text on demand — not when the build chimed. Most failures are never
+shared, and a log is a request nobody asked for.
+
+Two providers, best first:
+
+1. **Annotations.** `<build url>.json` may carry them inline; otherwise `<build url>/annotations`. Error
+   style ranks above warning above the rest. An annotation is a human already writing down what broke, so
+   nothing scraped can beat it.
+2. **The failed step's log.** The failed jobs come from the build JSON — non-zero `exit_status`, or a state
+   of `failed`/`broken`/`timed_out`, with `soft_failed` forgiven. Its log is fetched from whichever
+   candidate URL answers first (`jobLogUrls`), and the body may be plain text or JSON with the log under
+   `content`.
+
+Neither is required. A build whose log cannot be read still copies as one line naming it and linking it,
+which is the part someone needs in order to ask for help.
+
+### Picking the passage
+
+`summariseLog` cleans, then scores, then cuts:
+
+- **Clean.** ANSI colour, cursor moves, and Buildkite's own per-line APC timestamps (`ESC _bk;t=… BEL`)
+  come off. A line containing `\r` was overwritten in place by a progress bar, so only what it settled on
+  survives. Blank lines and immediate repeats go.
+- **Score.** Each line in the last 400 gets the weight of the strongest pattern it matches — a leading
+  `Error:`/`panic:`, a traceback, `npm ERR!`, `12 failures`, a non-zero exit status — minus penalties for
+  the ways those words appear without being the cause: `0 failures`, a warning, a retry, an echoed `$`
+  command, a stack frame. Position adds up to 3, enough to break ties between equally-worded lines but
+  never enough to anchor a line that said nothing.
+- **Cut.** The best line anchors an excerpt: up to two lines of lead-in above it (stopping at a section
+  marker or anything scoring negative, so a passing suite above the error stays out), then forward to a
+  section marker, 12 lines, or 900 characters. A log where nothing scores falls back to its tail, which is
+  what a person would have looked at anyway.
+
+There is no model and no remote call. Sending build logs anywhere would cost the guarantee in the README
+that nothing leaves the browser, and the shape of a failing log is regular enough that scoring it does the
+job — `test/failure.test.js` pins the judgements down against real-looking output.
+
+### Confirming the endpoints on your account
+
+`jobLogUrls` and `annotationUrls` try several paths because Buildkite's internal ones are undocumented and
+differ between payload shapes. To see which actually answer on your organisation, open a **failed** build,
+open the DevTools console, and run `scripts/probe-failure.js` — paste the file's contents in. It prints
+the build JSON's keys, the failed jobs and their URL-ish fields, every log candidate with its status and
+content type, and whether annotations exist, with the org and pipeline names replaced. Paste the output
+into an issue and the losing candidates can be dropped.
 
 ## Auto-discovery
 
