@@ -10,6 +10,9 @@
     'scheduled', 'waiting', 'waiting_failed', 'skipped', 'not_run', 'creating',
   ];
   const ALIASES = { started: 'running', cancelling: 'canceling', cancelled: 'canceled' };
+  // Mirrors FAILURE_STATES in status.js. A content script is not a module, so
+  // the constant is repeated rather than imported.
+  const FAILURE_STATES = ['failed', 'canceled', 'skipped', 'not_run'];
 
   let currentUrl = null;
   let hideTimer = null;
@@ -324,6 +327,35 @@
     return 'dark';
   }
 
+  /**
+   * Copy from a content script. The async clipboard API is granted on a user
+   * gesture in a focused document, but a refused permission still has to work,
+   * so fall back to a selection in the page's own DOM — which is what the page
+   * itself would do, and needs no permission the extension does not have.
+   */
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to the selection route
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      // Off-screen rather than hidden: a display:none field cannot be selected.
+      ta.style.cssText = 'position:fixed;top:0;left:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
   function removeBanner() {
     clearTimeout(hideTimer);
     document.getElementById(BANNER_ID)?.remove();
@@ -410,7 +442,42 @@
       hideTimer = setTimeout(() => host.remove(), 6000);
     }
 
-    if (status.watched) showWatching();
+    function showFailed() {
+      text.innerHTML = `${label} <span class="state">${escapeHtml(status.stateLabel)}</span>`;
+      primary.textContent = 'Copy reason';
+      primary.className = 'action';
+      primary.disabled = false;
+      primary.onclick = async () => {
+        primary.disabled = true;
+        primary.textContent = 'Reading…';
+        clearTimeout(hideTimer); // do not vanish mid-read
+        const reply = await send({ type: 'FAILURE_REPORT', url: info.url });
+        if (!reply?.report) {
+          primary.disabled = false;
+          primary.textContent = 'Retry';
+          text.innerHTML = `Could not read the failure: ${escapeHtml(reply?.error || 'unknown error')}`;
+          return;
+        }
+        if (!await copyToClipboard(reply.report)) {
+          primary.disabled = false;
+          primary.textContent = 'Retry';
+          text.innerHTML = `${label} — <span class="state">the clipboard was refused</span>`;
+          return;
+        }
+        // Say which of the two it managed. The link alone is still worth
+        // having, but not if you paste it expecting the error to be in there.
+        primary.textContent = 'Copied';
+        text.innerHTML = reply.source
+          ? `<span class="watching">Copied</span> ${label} and why it failed`
+          : `<span class="watching">Copied</span> ${label} and its link `
+            + '<span class="state">— the log could not be read</span>';
+        hideTimer = setTimeout(() => host.remove(), 6000);
+      };
+      scheduleHide(host);
+    }
+
+    if (status.failed) showFailed();
+    else if (status.watched) showWatching();
     else showIdle();
 
     document.documentElement.appendChild(host);
@@ -444,13 +511,18 @@
       watched: Boolean(reply.watched),
       stateLabel: labelFor(reply),
     };
+    // A build that already failed is worth a banner even though there is
+    // nothing left to wait for: its reason is the thing you came to copy.
+    status.failed = status.finished
+      && (FAILURE_STATES.includes(status.state) || Boolean(reply.unknownFinish));
 
-    if (status.finished && !status.watched) return; // nothing to wait for
+    if (status.finished && !status.failed && !status.watched) return; // nothing to offer
     await renderBanner(info, status);
   }
 
   function labelFor(s) {
     if (s.blocked) return 'blocked, waiting for input';
+    if (s.unknownFinish && s.rawState) return `finished as "${s.rawState}"`;
     switch (s.state) {
       case 'started':
       case 'running': return 'running';

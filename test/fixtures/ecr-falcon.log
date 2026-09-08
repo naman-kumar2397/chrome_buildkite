@@ -1,0 +1,37 @@
+--- Login to ECR
+WARNING! Using --password via the CLI is insecure. Use --password-stdin.
+WARNING! Your password will be stored unencrypted in /root/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+Login Succeeded
+cfn deploy \
+	--no-fail-on-empty-changeset \
+	--capabilities CAPABILITY_NAMED_IAM \
+	--stack-name falcon-sensor-ecr \
+	--role-arn arn:aws:iam::000000000000:role/cfn-deploy-role \
+	--parameter-overrides \
+		RepositoryName=falcon-sensor
+2026-09-08 04:27:24,555 cnp.cli.cfn:146 INFO	Loading template ecr-repo.cf.yaml from /usr/local/cicd/cloudformation
+2026-09-08 04:27:24,588 botocore.credentials:1075 INFO	Found credentials from IAM Role: SC-EXAMPLE-BuildKite-Role
+2026-09-08 04:27:24,954 cnp.cli.cfn:413 INFO	The change set contain no changes.
+2026-09-08 04:27:24,997 cnp.cli.cfn:178 INFO	Exiting without change set
+{
+    "registryId": "000000000000",
+    "repositoryName": "falcon-sensor",
+    "imageTagMutability": "MUTABLE"
+}
+export FALCON_CLIENT_ID=EXAMPLEclientidEXAMPLEclientid00; \
+export FALCON_CLIENT_SECRET=EXAMPLEsecretEXAMPLEsecretEXAMPLE00; \
+export FALCON_CID=EXAMPLECIDEXAMPLECIDEXAMPLECID00-43; \
+export SENSOR_TYPE=falcon-container; \
+curl -Ls -k https://github.com/CrowdStrike/falcon-scripts/releases/latest/download/falcon-container-sensor-pull.sh -o ./falcon-container-sensor-pull.sh && chmod +x ./falcon-container-sensor-pull.sh && ./falcon-container-sensor-pull.sh;
+Using the following settings:
+Falcon Region:   api.us-2.crowdstrike.com
+Falcon Registry: registry.crowdstrike.com
+Fatal error: Pulling multi-arch images locally is not supported.
+You can either:
+    - Pull a specific platform from the multi-arch image using the -p, --platform flag
+    - Copy the multi-arch image to a registry using the -c, --copy flag
+make: *** [Makefile:9: download-falcon-image] Error 1
+🚨 Error: The command exited with status 2
+user command error: running "plugin docker-buildkite-plugin command" shell hook: the plugin docker-buildkite-plugin command hook exited with status 2

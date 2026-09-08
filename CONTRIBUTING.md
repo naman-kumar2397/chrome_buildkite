@@ -11,7 +11,8 @@ manifest.json     permissions, content-script matches, offscreen + alarms
 background.js     service worker: watch store, 30 s alarm, provider chain, notifications, chimes
 status.js         pure logic: URL parsing, state normalisation, event decisions, provider chain
 discovery.js      pure logic: parsing the /builds listing, baseline and dedupe rules, provider chain
-content.js        the in-page banner, plus DOM-state and DOM-build-list responders
+failure.js        pure logic: log cleaning, picking the passage that explains a failure, provider chain
+content.js        the in-page banner (watch, unwatch, copy a failure), plus the DOM responders
 offscreen.*       Web Audio chime synthesis (a service worker cannot play audio)
 popup.*           watch list, recently finished, test chimes, volume, diagnostics
 vendor/           Apple design tokens, copied verbatim from the design repo — do not hand-edit
@@ -36,6 +37,7 @@ npm i --no-save playwright && npx playwright install chromium
 npm run permissions   # proves no unnecessary permission has crept back in
 npm run contrast      # WCAG AA, measured from rendered pixels
 npm run smoke         # loads the extension, seeds storage, checks the popup and chime path
+npm run banner        # the in-page banner on a failed build, through to the real clipboard
 npm run icons         # regenerates the icons and the store icon from one drawing
 npm run assets        # regenerates the store screenshots from fictional data
 ```
@@ -44,10 +46,10 @@ npm run assets        # regenerates the store screenshots from fictional data
 `--load-extension` from branded builds in version 137 and ignores the flag silently: the browser starts
 and the extension is simply absent, and the first symptom is a timeout waiting for its service worker.
 `CHROME_PATH` may name a Chromium or Chrome for Testing binary kept elsewhere; it must never point at
-Google Chrome. All five scripts launch through `scripts/lib/browser.mjs`, which explains exactly this if
+Google Chrome. All six scripts launch through `scripts/lib/browser.mjs`, which explains exactly this if
 the extension fails to load.
 
-CI runs lint and the unit tests on every push, and the three browser checks in a second job. A `v*` tag
+CI runs lint and the unit tests on every push, and the four browser checks in a second job. A `v*` tag
 builds the zip and attaches it to a release, refusing if the tag disagrees with `manifest.json` and
 `package.json`.
 
@@ -89,6 +91,95 @@ fetch(location.pathname + '.json', { credentials: 'include', headers: { Accept: 
 A `state` in the output means provider 1 is working and polling is cheap and exact. If you get HTML or
 an error the extension silently falls through to providers 2 and 3. The popup's **Copy diagnostics**
 link produces a fuller, redacted version of this for bug reports.
+
+## Why a build failed
+
+**Copy reason** — on a failed row in *Recently finished*, and on the in-page banner when you open a build
+that failed — sends `FAILURE_REPORT` to the service worker, which assembles the clipboard text on demand,
+not when the build chimed. Most failures are never shared, and a log is a request nobody asked for.
+
+The banner is the reason a finished build now raises one at all: `detect()` used to drop anything already
+over, since there was nothing left to wait for. A failed build has something to offer, so it renders in a
+third mode alongside *watch* and *unwatch*. A finished build that passed is still dropped.
+
+Copying from a content script tries `navigator.clipboard.writeText` first — granted on a user gesture in a
+focused document — and falls back to selecting an off-screen textarea in the page's own DOM. That is what
+the page itself would do, so neither route needs the `clipboardWrite` permission; `npm run permissions`
+holds the surface to what it was.
+
+Two providers, best first:
+
+1. **Annotations.** `<build url>.json` may carry them inline; otherwise `<build url>/annotations`. Error
+   style ranks above warning above the rest. An annotation is a human already writing down what broke, so
+   nothing scraped can beat it. The build payload's `annotation_counts_by_style` is checked first, so a
+   build that says it has none does not spend requests finding out.
+2. **The failed step's log**, found through the endpoints below.
+
+Neither is required. A build whose log cannot be read still copies as one line naming it and linking it,
+which is the part someone needs in order to ask for help.
+
+### The endpoints, as confirmed against a real organisation
+
+Every one of these was arrived at by probing, not documentation. `scripts/probe-failure.js` re-runs the
+whole hunt on any account.
+
+| Step | Endpoint | Notes |
+|---|---|---|
+| Build | `<build url>.json` | `jobs` and `steps` are **present but empty** on a modern build page |
+| Jobs | `<build_data_base_path>/jobs?state=failed` | array under `records`; the good source — job records carry `base_path`, `exit_status`, `name`, `soft_failed` |
+| Steps | `<build_data_base_path>/steps?exclude_group_steps=true&state=failed` | fallback; step records have `outcome` (`hard_failed`) and no `exit_status`, and name their job only as `statistics.latest_job_id` |
+| Log | `/organizations/<org>/pipelines/<pipeline>/builds/<n>/jobs/<job id>/log` | the job record's own `base_path` + `/log` is the same thing |
+
+Three traps, each of which cost a round of probing:
+
+- **A step's `uuid` is not its job's.** Every log URL built from it 404s. `jobIdOf` reads
+  `statistics.latest_job_id` first for exactly this reason.
+- **The log under the build's vanity path 404s.** `/<org>/<pipeline>/builds/<n>/jobs/<id>/log` returns the
+  build page as `text/html`; only the `/organizations/…` path answers.
+- **The log body is HTML.** It arrives under `output`, with a `<time>` element in front of every line and
+  `<span>`s where the ANSI colours were. `decodeLogHtml` removes the `<time>` element outright — unwrapping
+  it would leave the timestamp duplicated as text at the head of each line — and keeps the rest.
+
+### Nothing that is copied is unredacted
+
+`redactSecrets` runs over every line on its way into the excerpt, and over a job's label. It catches
+assignments whose name gives them away, values too opaque to be anything but a key, and the shapes that are
+recognisable on sight: AWS ids, GitHub and Slack tokens, JWTs, bearer headers, credentials inside a URL,
+private key blocks.
+
+It is a safety net, not a guarantee, and deliberately narrow: ARNs, account ids and hostnames stay, because
+removing those would gut the error message. It exists because a real build under test exported CrowdStrike
+credentials in the step that failed, six lines above the anchor.
+
+### Picking the passage
+
+`summariseLog` cleans, then scores, then cuts:
+
+- **Clean.** ANSI colour, cursor moves, and Buildkite's own per-line APC timestamps (`ESC _bk;t=… BEL`)
+  come off. A line containing `\r` was overwritten in place by a progress bar, so only what it settled on
+  survives. Blank lines and immediate repeats go.
+- **Score.** Each line in the last 400 gets the weight of the strongest pattern it matches — a leading
+  `Error:`/`panic:`, a traceback, `npm ERR!`, `12 failures`, a non-zero exit status — minus penalties for
+  the ways those words appear without being the cause: `0 failures`, a warning, a retry, an echoed `$`
+  command, a stack frame. Position adds up to 3, enough to break ties between equally-worded lines but
+  never enough to anchor a line that said nothing.
+- **Cut.** The best line anchors an excerpt: up to two lines of lead-in above it (stopping at a section
+  marker or anything scoring negative, so a passing suite above the error stays out), then forward to a
+  section marker, 12 lines, or 900 characters. A log where nothing scores falls back to its tail, which is
+  what a person would have looked at anyway.
+
+There is no model and no remote call. Sending build logs anywhere would cost the guarantee in the README
+that nothing leaves the browser, and the shape of a failing log is regular enough that scoring it does the
+job — `test/failure.test.js` pins the judgements down against real-looking output.
+
+### Confirming the endpoints on your account
+
+`jobLogUrls` and `annotationUrls` try several paths because Buildkite's internal ones are undocumented and
+differ between payload shapes. To see which actually answer on your organisation, open a **failed** build,
+open the DevTools console, and run `scripts/probe-failure.js` — paste the file's contents in. It prints
+the build JSON's keys, the failed jobs and their URL-ish fields, every log candidate with its status and
+content type, and whether annotations exist, with the org and pipeline names replaced. Paste the output
+into an issue and the losing candidates can be dropped.
 
 ## Auto-discovery
 

@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Copy reason** on a failed build — on its row in *Recently finished*, and on the in-page banner when you
+  open a build that failed. It puts the build, its link and the passage of
+  the log that explains the failure on the clipboard, ready to paste into Slack or hand to a model. An
+  annotation published by the pipeline wins if there is one; otherwise the failed step's log is cleaned of
+  ANSI and Buildkite's own timestamps, scored line by line for what actually reads like a cause, and cut to
+  a short excerpt. The log is read only when the button is pressed, with the session the browser already
+  has, and a build whose log cannot be read still copies as its name and link. No model, no remote call.
+- `scripts/probe-failure.js`, a console script that reports which job-log and annotation endpoints answer on
+  a given Buildkite organisation, so the candidate lists in `failure.js` can be narrowed to what works.
+- `npm run banner`, a browser check covering the banner on an already-failed build through to the real
+  clipboard. Added to CI alongside the permission, contrast and popup checks.
+- Every line copied is scrubbed of anything credential-shaped first — see CONTRIBUTING for what that does
+  and does not cover.
+- `npm run contrast` measures text contrast from rendered pixels in a real browser — both appearances, three
+  page grounds — and fails below WCAG AA. Added to CI alongside the permission and smoke checks.
+- The browser checks now run on Playwright's bundled Chromium (Chrome for Testing) through one shared
+  launcher, `scripts/lib/browser.mjs`. Google Chrome 137 removed `--load-extension` from branded builds and
+  ignores it silently, so on a machine with only Google Chrome the extension never loaded and the checks timed
+  out waiting for its service worker. That failure now explains itself and names the fix.
+
+### Changed
+- The popup counts blocked builds separately from running ones. `isActive` treats anything unfinished as
+  worth watching, which is right — someone has to unblock a blocked build — but the popup reported the lot
+  as "running builds found", so three builds waiting for input read as three builds in progress.
+- The in-page banner now appears on a build that has already finished, when it finished badly. It used to
+  drop anything already over, on the grounds that there was nothing left to wait for; a failed build has its
+  reason to offer. A finished build that passed still raises nothing.
+- The chime buttons and the `AUTO` tag are neutral, carrying a coloured dot rather than a coloured background.
+  Colour on its own tint cannot reach 4.5:1 without going darker than Apple's published tier, and the HIG asks
+  for tint on one control per view rather than four.
+
 ### Fixed
 - The in-page banner rendered dark text on dark glass over Buildkite. It chose its contrast from
   `document.body`, which Buildkite leaves light while painting its dark theme on an inner wrapper. It now
@@ -16,19 +48,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marks keep the default tier. Muted text was also too light at 3.2:1.
 - The banner's primary action was white on `--sys-blue`, which is 3.5:1. It now uses the increased-contrast
   blue as its fill.
-
-### Changed
-- The chime buttons and the `AUTO` tag are neutral, carrying a coloured dot rather than a coloured background.
-  Colour on its own tint cannot reach 4.5:1 without going darker than Apple's published tier, and the HIG asks
-  for tint on one control per view rather than four.
-
-### Added
-- `npm run contrast` measures text contrast from rendered pixels in a real browser — both appearances, three
-  page grounds — and fails below WCAG AA. Added to CI alongside the permission and smoke checks.
-- The browser checks now run on Playwright's bundled Chromium (Chrome for Testing) through one shared
-  launcher, `scripts/lib/browser.mjs`. Google Chrome 137 removed `--load-extension` from branded builds and
-  ignores it silently, so on a machine with only Google Chrome the extension never loaded and the checks timed
-  out waiting for its service worker. That failure now explains itself and names the fix.
 
 ## [1.0.0] — 2026-09-03
 

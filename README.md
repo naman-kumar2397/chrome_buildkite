@@ -76,6 +76,38 @@ A desktop notification names the pipeline and build number, and clicking it open
 chime entirely and the popup still has it: **Recently finished** keeps the last dozen builds that chimed,
 colour-coded by outcome, so you always know what happened while you were away.
 
+## And what actually broke
+
+A failed build's row carries a **Copy reason** button — and so does the banner, when you open a build
+that failed. It puts the build, its link, and the part of the log that explains the failure on your
+clipboard — ready to paste into Slack when you need a hand, or to hand to a model as a prompt:
+
+````
+Build web #9696 failed — https://buildkite.com/acme/web/builds/9696
+Failed step: RSpec (exit 1)
+
+```
+Failures:
+  1) Widget#total sums the line items
+     Failure/Error: expect(widget.total).to eq(42)
+       expected: 42
+            got: 41
+```
+````
+
+Finding that passage is the whole trick. If the pipeline published an annotation, that wins — someone
+already wrote down what went wrong. Otherwise it reads the failed step's log and scores every line on
+what it says and where it falls, because errors cluster at the end and `12 examples, 0 failures` is not
+one. The best line anchors a short excerpt, trimmed to something you can read in a glance.
+
+It reads the log only when you press the button, using the Buildkite session your browser already has,
+and the result goes to your clipboard and nowhere else. If the log can't be read you still get the first
+line — the build and its link, which is the part you needed in order to ask.
+
+Opening any build that failed is enough: the banner offers the reason whether or not you were ever
+watching it, so builds that broke while you were away are one click too. A build that passed still
+raises nothing.
+
 ## Nothing to set up
 
 No API token. No login. No account. It reads build status using the Buildkite session your browser

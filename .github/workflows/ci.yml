@@ -78,3 +78,7 @@ jobs:
 
       - name: Popup smoke test
         run: npm run smoke
+
+      # The banner on an already-failed build, through to the real clipboard.
+      - name: Banner smoke test
+        run: npm run banner

@@ -16,6 +16,7 @@ const SHIPPED = [
   'background.js',
   'status.js',
   'discovery.js',
+  'failure.js',
   'content.js',
   'offscreen.html',
   'offscreen.js',
