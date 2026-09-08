@@ -549,7 +549,7 @@ async function jobLogProvider({ buildUrl, jobs }, { fetchImpl }) {
       }
     }
   }
-  throw new ProviderError(`log: no readable log (${tried.slice(0, 4).join('; ') || 'no candidate urls'})`, 'shape');
+  throw new ProviderError(`log: no readable log (${tried.join('; ') || 'no candidate urls'})`, 'shape');
 }
 
 const REASON_PROVIDERS = [
